@@ -1,0 +1,21 @@
+{
+	"name": "@burst/auth",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"generate": "bunx auth@latest generate --config src/auth.ts --adapter drizzle --dialect postgresql --output ../db/src/schema/auth.ts --yes",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@better-auth/drizzle-adapter": "^1.7.3",
+		"@burst/db": "workspace:*",
+		"better-auth": "^1.7.3",
+		"zod": "^4.5.4"
+	},
+	"devDependencies": {
+		"typescript": "^7.0.2"
+	}
+}

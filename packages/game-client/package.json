@@ -1,0 +1,27 @@
+{
+	"name": "@burst/game-client",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"test": "bun test",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@burst/game-core": "workspace:*",
+		"@dimforge/rapier3d-compat": "0.20.0",
+		"@react-three/drei": "^10.7.8",
+		"@react-three/fiber": "^9.7.0",
+		"@react-three/rapier": "^2.2.0",
+		"@types/react": "19.2.8",
+		"react": "19.2.8",
+		"three": "^0.186.0",
+		"zustand": "^5.0.15"
+	},
+	"devDependencies": {
+		"@types/three": "^0.185.4",
+		"typescript": "^7.0.2"
+	}
+}

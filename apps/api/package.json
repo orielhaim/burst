@@ -1,0 +1,23 @@
+{
+	"name": "@burst/api",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "bun --watch src/index.ts",
+		"start": "bun src/index.ts",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@burst/auth": "workspace:*",
+		"@burst/db": "workspace:*",
+		"@burst/game-auth": "workspace:*",
+		"@burst/protocol": "workspace:*",
+		"@elysiajs/cors": "^1.4.2",
+		"better-auth": "^1.7.3",
+		"elysia": "^1.4.30",
+		"zod": "^4.5.4"
+	},
+	"devDependencies": {
+		"typescript": "^7.0.2"
+	}
+}

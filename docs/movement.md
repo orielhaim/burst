@@ -1,0 +1,18 @@
+# Player movement tuning
+
+The movement simulation runs at 60 Hz. Distances use world metres, speeds use metres per second, accelerations use metres per second squared, times use seconds, and angles use radians. `MovementConfig.ts` is the source of truth.
+
+The 6.2 walk speed and 9.1 sprint speed are desired speeds, not clamps. Ground acceleration reaches walk speed in about 180 ms and sprint speed in about 340 ms. This keeps the first part of a run measurable without delaying the first response to input. Ground steering rotates velocity toward input at up to 9 radians per second, so a 90 degree running turn completes in about 175 ms without discarding speed. Releasing input uses 25 m/s² deceleration plus speed-proportional friction. Reverse input multiplies braking by 2.4 so a player can change direction during a gunfight without rotating sprint momentum in one tick.
+
+Air input uses 12 m/s² acceleration at 42 percent control and almost no drag. A sprint jump therefore keeps its takeoff speed while still allowing landing corrections. The 9.2 m/s jump impulse, 28 m/s² gravity, 100 ms coyote window, and 120 ms jump buffer produce a short, readable arc with forgiving edge and landing timing.
+
+Slides require a Ctrl press and 5.5 m/s actual horizontal speed, including walking, sprinting or external momentum. An airborne press is buffered for 350 ms and can be released before landing. Entry adds up to 1.1 m/s, capped at sprint speed plus 1.1 m/s; faster external momentum is preserved without another boost. Flat friction removes 7.5 m/s each second with 0.45/s drag; a full sprint slide reaches the 3.2 m/s exit threshold in roughly 700 ms. There is no duration limit. Gravity projected onto the ground supplies downhill gain and uphill loss. Steering redirects momentum without propulsion; reverse input brakes. Holding Ctrl after the slide ends stays crouched and cannot restart a slide. Jumping preserves the remaining horizontal velocity.
+
+ADS takes priority over held sprint, and sprint waits for the weapon to finish lowering. Sliding still permits ADS and ignores ADS walking-speed scaling. Wall jumps project view-relative movement intent along the wall, retain part of the approach momentum, add 2.4 m/s outward separation and 9.4 m/s lift. Looking upward adds up to 2 m/s of lift. Same-wall cooldown and separation prevent repeated boosts against one contact.
+
+First-person motion is simulated in LocomotionResponse. Critically damped springs react to velocity changes in view space, vertical motion, turning and distance-based footfalls capped at about 4.3 vertical cycles per second. Acceleration is filtered before reaching the springs to suppress rapid small corrections. ADS tightens the response without freezing it; sprint produces faster, larger steps. Camera aim offsets feed both rendering and shot direction. The FOV response is about three degrees at sprint speed and settles during ADS. Mouse look is consumed at render rate, independent of fixed-step position interpolation. A sustained forward pitch at running speed and a small acceleration-driven roll make momentum visible without faster bobbing. Sliding adds a lower weapon pose and more cant. No timed jump or landing animation drives these effects.
+
+The Rapier character controller uses a 15 mm skin, 300 mm maximum step height, 200 mm minimum step width, and a roughly 49 degree maximum walkable slope. The skin is small enough to be invisible while preventing exact surface contact. The physical horizontal safety cap is 35 m/s, well above player-driven speeds, so slides, slopes, wall jumps, and later external impulses can exceed sprint speed without being discarded.
+
+
+Weapon contact handling and loadout behavior are documented in `weapons.md`.

@@ -1,0 +1,28 @@
+{
+	"name": "burst",
+	"private": true,
+	"type": "module",
+	"workspaces": ["apps/*", "packages/*"],
+	"scripts": {
+		"dev": "bun run scripts/dev.ts",
+		"dev:web": "bun run --filter web dev",
+		"dev:api": "bun run --filter @burst/api dev",
+		"dev:game": "bun run --filter @burst/game-server dev",
+		"typecheck": "bun run --filter '*' typecheck",
+		"db:generate": "bun run --filter @burst/db generate",
+		"db:migrate": "bun run --filter @burst/db migrate",
+		"db:studio": "bun run --filter @burst/db studio",
+		"auth:generate": "bun run --filter @burst/auth generate",
+		"db:up": "docker-compose up -d postgres",
+		"db:down": "docker-compose down"
+	},
+	"trustedDependencies": ["esbuild", "lightningcss"],
+	"overrides": {
+		"@dimforge/rapier3d-compat": "0.20.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.5.12",
+		"@types/bun": "latest",
+		"typescript": "^7.0.2"
+	}
+}
