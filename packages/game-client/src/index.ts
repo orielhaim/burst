@@ -59,7 +59,6 @@ export type {
 export { ScopeRegistry } from "./weapons/optics/ScopeRegistry";
 export { rifleDefinition } from "./weapons/definitions/rifle";
 export type {
-	FireResolution,
 	FireWeaponCommand,
 	WeaponDefinition,
 } from "./weapons/WeaponDefinition";
@@ -70,7 +69,10 @@ export { WeaponRuntime } from "./weapons/WeaponRuntime";
 // —— mutable runtime (no React state per frame) ——
 export { GameRuntime } from "./runtime/GameRuntime";
 export type { RuntimeOptions, ShotEvent } from "./runtime/GameRuntime";
-export { GameRuntimeContext, useGameRuntime } from "./runtime/GameRuntimeContext";
+export {
+	GameRuntimeContext,
+	useGameRuntime,
+} from "./runtime/GameRuntimeContext";
 export { devLog, getLogLines } from "./runtime/log";
 export { useGameStore, DEFAULT_UI } from "./runtime/gameStore";
 export { useDebugStore } from "./runtime/debugStore";
@@ -98,4 +100,41 @@ export type { MapEntry, MapSpawn } from "./maps/registry";
 export { WeaponLoadout } from "./weapons/WeaponLoadout";
 export { MeleeRuntime } from "./weapons/MeleeRuntime";
 export { primaryLoadout, knifeDefinition } from "./weapons/definitions/loadout";
-export type { MeleeDefinition, AnyWeaponDefinition } from "./weapons/WeaponDefinition";
+export type {
+	MeleeDefinition,
+	AnyWeaponDefinition,
+} from "./weapons/WeaponDefinition";
+
+export {
+	ProceduralCharacter,
+	CHARACTER_CONFIG,
+} from "./character/ProceduralCharacter";
+export type {
+	CharacterInput,
+	CharacterPose,
+	GroundQuery,
+	HandTargets,
+} from "./character/ProceduralCharacter";
+export { CharacterWorld } from "./character/CharacterWorld";
+export { CharacterView } from "./character/CharacterView";
+export { HitRegions } from "./character/HitRegions";
+export {
+	ProjectileSimulation,
+	integrateProjectile,
+} from "./weapons/fire/ProjectileFire";
+export { WORLD_ENVIRONMENT } from "./sim/Environment";
+export { AbilityRuntime } from "./abilities/AbilityRuntime";
+export type {
+	AbilityPresentation,
+	AbilityUpdateContext,
+} from "./abilities/AbilityRuntime";
+export { AbilityRegistry } from "./abilities/SpecialAbility";
+export type {
+	DashAbilityDefinition,
+	GrappleAbilityDefinition,
+	SpecialAbilityDefinition,
+} from "./abilities/SpecialAbility";
+export {
+	dashDefinition,
+	grappleDefinition,
+} from "./abilities/definitions";

@@ -1,3 +1,5 @@
+import { WORLD_ENVIRONMENT } from "../sim/Environment";
+import { CollisionLayer, interactionGroups } from "../physics/CollisionGroups";
 import { EMPTY_INPUT_FRAME, type GamePhase, type Vec3 } from "../core/types";
 import { Input } from "../core/Input";
 
@@ -10,7 +12,9 @@ import { PlayerController } from "../player/PlayerController";
 import { LocomotionResponse } from "../sim/LocomotionResponse";
 import { CameraState, DEFAULT_CAMERA_STATE_CONFIG } from "../sim/cameraState";
 import { ProjectileSimulation } from "../weapons/fire/ProjectileFire";
-import { resolveHitscan } from "../weapons/fire/HitscanFire";
+import { CharacterWorld } from "../character/CharacterWorld";
+import { resolveWeaponAttachments } from "../character/WeaponAttachments";
+
 import {
 	primaryLoadout,
 	knifeDefinition,
@@ -19,9 +23,15 @@ import { WeaponLoadout } from "../weapons/WeaponLoadout";
 
 import { WeaponObstruction } from "../weapons/view/WeaponObstruction";
 import type { FireWeaponCommand } from "../weapons/WeaponDefinition";
+import { AbilityRuntime, type AbilityPresentation } from "../abilities/AbilityRuntime";
+import { grappleDefinition } from "../abilities/definitions";
 import { useGameStore } from "./gameStore";
 
 export type WeaponImpact = {
+	actorId?: string;
+	region?: string;
+	impactVelocity?: Vec3;
+	timeOfFlight?: number;
 	weaponId: string;
 	damage: number;
 	point: Vec3;
@@ -57,10 +67,26 @@ export class GameRuntime {
 	locomotion = new LocomotionResponse();
 	readonly camera = new CameraState({ ...DEFAULT_CAMERA_STATE_CONFIG });
 	readonly projectiles = new ProjectileSimulation();
+	readonly characters = new CharacterWorld(this.projectiles.regions);
+	previewPlayer: PlayerController | null = null;
+	private previewTime = 0;
 	readonly equipment = new WeaponLoadout(primaryLoadout, knifeDefinition);
 	get weapon() {
 		return this.equipment.firearm;
 	}
+	/** Local character's Q special ability. Swap via `ability.equip(id)`. */
+	readonly ability = new AbilityRuntime(grappleDefinition);
+	private abilityUi: AbilityPresentation = {
+		id: grappleDefinition.id,
+		name: grappleDefinition.name,
+		kind: "grapple",
+		cooldownRemaining: 0,
+		cooldownDuration: grappleDefinition.cooldown,
+		ready: true,
+		pulling: false,
+		lineStart: null,
+		lineEnd: null,
+	};
 	/** Tunable at runtime by Leva (dev only). Production truth stays in code. */
 	readonly movementConfig: MovementConfig = { ...DEFAULT_MOVEMENT_CONFIG };
 	/** Scope render resolution scale override (dev only). Null = definition. */
@@ -121,8 +147,6 @@ export class GameRuntime {
 	obstructionNormal: Vec3 | null = null;
 	/** Written by WeaponViewModel from its muzzle anchor ref. */
 	muzzleWorld: Vec3 | null = null;
-	/** Written by WeaponViewModel from probe locals → world. */
-	probeWorldPositions: Array<{ position: Vec3; radius: number }> | null = null;
 
 	/** Drained by WorldEffects every frame. */
 	shots: ShotEvent[] = [];
@@ -134,6 +158,25 @@ export class GameRuntime {
 		};
 	}
 	private emitImpact(event: WeaponImpact): void {
+		if (event.actorId) {
+			const incoming = event.impactVelocity ?? {
+				x: event.point.x - this.eye.x,
+				y: event.point.y - this.eye.y,
+				z: event.point.z - this.eye.z,
+			};
+			this.characters.damage(event.actorId, event.damage, incoming);
+			const target =
+				event.actorId === "preview" ? this.previewPlayer : this.player;
+			if (target && event.actorId !== "local") {
+				const speed = Math.min(10, Math.max(1.2, event.damage * 0.08));
+				const length = Math.hypot(incoming.x, incoming.z) || 1;
+				target.applyImpulse({
+					x: (incoming.x / length) * speed,
+					y: Math.min(2.4, event.damage * 0.012),
+					z: (incoming.z / length) * speed,
+				});
+			}
+		}
 		for (const listener of this.impactListeners) listener(event);
 	}
 
@@ -176,6 +219,12 @@ export class GameRuntime {
 	attachPhysics(physics: CharacterPhysics, spawn: Vec3, yaw: number): void {
 		this.physics = physics;
 		this.player = new PlayerController(physics, spawn, this.movementConfig);
+		if (this.mapId === "test-yard")
+			this.previewPlayer = new PlayerController(
+				physics,
+				{ x: -5, y: 1.2, z: 7 },
+				{ ...this.movementConfig },
+			);
 		this.obstruction = new WeaponObstruction(
 			physics,
 			this.player.body,
@@ -212,6 +261,59 @@ export class GameRuntime {
 		this.renderAlpha = 1;
 	}
 
+	/** Blended eye for render-rate presentation (same curve as PlayerCamera). */
+	getRenderEye(): Vec3 {
+		const t = this.renderAlpha;
+		const a = this.prevCam.eye;
+		const b = this.cam.eye;
+		return {
+			x: a.x + (b.x - a.x) * t,
+			y: a.y + (b.y - a.y) * t,
+			z: a.z + (b.z - a.z) * t,
+		};
+	}
+
+	/** Shortest-arc blend of presentation yaw (recoil + locomotion included). */
+	getRenderYaw(): number {
+		const t = this.renderAlpha;
+		const a = this.prevCam.yaw;
+		const b = this.cam.yaw;
+		let delta = b - a;
+		if (delta > Math.PI) delta -= Math.PI * 2;
+		if (delta < -Math.PI) delta += Math.PI * 2;
+		return a + delta * t;
+	}
+
+	/**
+	 * World attach point for ability cables — upper torso, not the eye.
+	 * Fully interpolated (eye + yaw) so the cable does not step at 60 Hz.
+	 */
+	getAbilityAttach(): Vec3 {
+		const eye = this.getRenderEye();
+		const yaw = this.getRenderYaw();
+		const forwardX = -Math.sin(yaw);
+		const forwardZ = -Math.cos(yaw);
+		return {
+			x: eye.x + forwardX * 0.22,
+			y: eye.y - 0.4,
+			z: eye.z + forwardZ * 0.22,
+		};
+	}
+
+	/** Fixed-step torso attach for sim queries (occlusion), not presentation. */
+	private getSimAbilityAttach(): Vec3 {
+		const recoil = this.camera.getRecoil();
+		const yaw =
+			this.camera.getYaw() + recoil.yaw + this.locomotion.aimYaw.value;
+		const forwardX = -Math.sin(yaw);
+		const forwardZ = -Math.cos(yaw);
+		return {
+			x: this.eye.x + forwardX * 0.22,
+			y: this.eye.y - 0.4,
+			z: this.eye.z + forwardZ * 0.22,
+		};
+	}
+
 	detachPhysics(): void {
 		this.player = null;
 		this.obstruction = null;
@@ -219,6 +321,20 @@ export class GameRuntime {
 		this.muzzleWorld = null;
 		this.shots.length = 0;
 		this.projectiles.clear();
+		this.characters.clear();
+		this.previewPlayer = null;
+		this.ability.reset();
+		this.abilityUi = {
+			id: this.ability.current.id,
+			name: this.ability.current.name,
+			kind: this.ability.current.kind,
+			cooldownRemaining: 0,
+			cooldownDuration: this.ability.current.cooldown,
+			ready: true,
+			pulling: false,
+			lineStart: null,
+			lineEnd: null,
+		};
 	}
 
 	play(): void {
@@ -264,6 +380,22 @@ export class GameRuntime {
 
 		if (playing) this.camera.applyLookDelta(frame.lookX, frame.lookY);
 
+		// Ability-owned motion runs first so PlayerController receives it as a
+		// velocity override (no locomotion/gravity fight → no cable vibration).
+		const abilityMotion =
+			playing && this.player
+				? this.ability.prepareMotion({
+						jumpPressed: frame.jumpPressed,
+						activated: frame.specialAbilityPressed,
+						player: this.player,
+						physics: this.physics,
+						cableStart: this.getSimAbilityAttach(),
+						moveX: frame.moveX,
+						moveZ: frame.moveZ,
+						lookYaw: this.camera.getYaw(),
+					})
+				: null;
+
 		if (this.player) {
 			this.player.update(dt, {
 				moveX: frame.moveX,
@@ -280,6 +412,7 @@ export class GameRuntime {
 					frame.aimHeld && this.equipment.canAim
 						? this.definition.ads.movementSpeedMultiplier
 						: 1,
+				velocityOverride: abilityMotion,
 			});
 			this.feet = this.player.getFeetPosition();
 			const eyeHeight = this.camera.smoothEyeHeight(
@@ -335,6 +468,7 @@ export class GameRuntime {
 			for (const weapon of this.equipment.primaries) {
 				if (weapon !== this.weapon || !canFire) weapon.advance(dt);
 			}
+		this.updateCharacters(dt);
 		for (const command of commands) this.fireWeapon(command);
 		if (playing && this.physics && this.player)
 			for (const event of this.projectiles.update(
@@ -353,34 +487,79 @@ export class GameRuntime {
 			}
 		if (meleeWindow && this.physics && this.player) {
 			const melee = this.equipment.melee;
-			const hit = this.physics.castSphere(
+			const range = melee.definition.range;
+			const delta = {
+				x: forward.x * range,
+				y: forward.y * range,
+				z: forward.z * range,
+			};
+			// Characters use the same hit-region seam as projectiles; world uses a sphere cast.
+			const characterHit = this.projectiles.regions.cast(
+				this.eye,
+				delta,
+				"local",
+			);
+			const worldHit = this.physics.castSphere(
 				this.eye,
 				forward,
 				melee.definition.radius,
-				melee.definition.range,
+				range,
 				this.player.body,
 			);
-			if (hit) {
+			const preferCharacter =
+				characterHit && (!worldHit || characterHit.distance <= worldHit.toi);
+			if (preferCharacter && characterHit) {
+				melee.confirmHit();
+				this.emitImpact({
+					weaponId: melee.definition.id,
+					damage: melee.definition.damage,
+					actorId: characterHit.actorId,
+					region: characterHit.region,
+					point: characterHit.point,
+				});
+				this.shots.push({
+					id: ++this.shotId,
+					origin: { ...this.eye },
+					point: characterHit.point,
+					normal: characterHit.normal,
+					hit: true,
+				});
+			} else if (worldHit) {
 				melee.confirmHit();
 				const point = {
-					x: this.eye.x + forward.x * hit.toi,
-					y: this.eye.y + forward.y * hit.toi,
-					z: this.eye.z + forward.z * hit.toi,
+					x: this.eye.x + forward.x * worldHit.toi,
+					y: this.eye.y + forward.y * worldHit.toi,
+					z: this.eye.z + forward.z * worldHit.toi,
 				};
 				this.emitImpact({
 					weaponId: melee.definition.id,
 					damage: melee.definition.damage,
 					point,
-					colliderHandle: hit.colliderHandle,
+					colliderHandle: worldHit.colliderHandle,
 				});
 				this.shots.push({
 					id: ++this.shotId,
 					origin: point,
 					point,
-					normal: hit.normal,
+					normal: worldHit.normal,
 					hit: true,
 				});
 			}
+		}
+
+		// Special ability (Q): dash / grapple write velocity after locomotion
+		// so the next fixed step starts from their result. Jump cancels a pull.
+		if (playing && this.player) {
+			this.abilityUi = this.ability.update({
+				dt,
+				activated: frame.specialAbilityPressed,
+				jumpPressed: frame.jumpPressed,
+				origin: { ...this.eye },
+				direction: forward,
+				player: this.player,
+				physics: this.physics,
+				cableStart: this.getSimAbilityAttach(),
+			});
 		}
 
 		if (this.player) {
@@ -426,64 +605,156 @@ export class GameRuntime {
 		}
 	}
 
-	/** Isolated so multiplayer can swap local resolution for server results. */
-	resolveFire(command: FireWeaponCommand, muzzle: Vec3) {
-		if (!this.physics || !this.player) return { command, hit: null, damage: 0 };
-		if (command.projectile.type === "hitscan") {
-			return resolveHitscan(
-				command,
-				this.definition.damage,
-				this.physics,
-				this.player.body,
-				muzzle,
-			);
-		}
-		return { command, hit: null, damage: 0 };
+	private fireWeapon(command: FireWeaponCommand): void {
+		const attachments = this.getWeaponAttachments();
+		const muzzle = this.muzzleWorld ?? attachments.muzzle;
+		// If the smoothed view model is temporarily inside cover, resolve its
+		// muzzle to the near side before launching. No damage occurs at trigger time.
+		const delta = {
+			x: muzzle.x - this.eye.x,
+			y: muzzle.y - this.eye.y,
+			z: muzzle.z - this.eye.z,
+		};
+		const distance = Math.hypot(delta.x, delta.y, delta.z);
+		const blocker =
+			distance > 0
+				? this.physics?.raycast(this.eye, delta, distance, this.player?.body)
+				: null;
+		const origin = blocker
+			? {
+					x: blocker.point.x - (delta.x / distance) * 0.01,
+					y: blocker.point.y - (delta.y / distance) * 0.01,
+					z: blocker.point.z - (delta.z / distance) * 0.01,
+				}
+			: muzzle;
+		// The sight chooses a convergence point, never damage. Flight still starts
+		// at the resolved muzzle and every hit is swept by the ballistic simulation.
+		const sightRange = WORLD_ENVIRONMENT.sightRange;
+		const sightHit = this.physics?.raycast(
+			this.eye,
+			command.direction,
+			sightRange,
+			this.player?.body,
+		);
+		const target = sightHit?.point ?? {
+			x: this.eye.x + command.direction.x * sightRange,
+			y: this.eye.y + command.direction.y * sightRange,
+			z: this.eye.z + command.direction.z * sightRange,
+		};
+		const direction = {
+			x: target.x - origin.x,
+			y: target.y - origin.y,
+			z: target.z - origin.z,
+		};
+		this.projectiles.launch({ ...command, origin: { ...origin }, direction });
+		if ((command.pellet ?? 0) === 0) this.applyShotRecoil();
 	}
 
-	private fireWeapon(command: FireWeaponCommand): void {
-		if (command.projectile.type === "projectile") {
-			this.projectiles.launch(command, this.definition.damage);
-			if ((command.pellet ?? 0) === 0) this.applyShotRecoil();
-			return;
-		}
-		const forward = this.camera.forward(
-			this.locomotion.aimPitch.value,
-			this.locomotion.aimYaw.value,
+	private getWeaponAttachments() {
+		return resolveWeaponAttachments(
+			this.equipment.definition,
+			this.eye,
+			this.camera.getYaw(),
+			this.camera.getPitch(),
+			this.adsProgress,
+			this.equipment.lowered,
+			this.obstructionRetraction,
+			this.obstructionLateral,
+			this.weapon.reloadProgress,
 		);
-		const fallback = {
-			x: this.eye.x + forward.x * 0.5,
-			y: this.eye.y + forward.y * 0.5,
-			z: this.eye.z + forward.z * 0.5,
-		};
-		const muzzle = this.muzzleWorld ?? fallback;
-		const resolution = this.resolveFire(command, muzzle);
-		const range = command.projectile.range;
-		const end = resolution.hit
-			? resolution.hit.point
-			: {
-					x: command.origin.x + command.direction.x * range,
-					y: command.origin.y + command.direction.y * range,
-					z: command.origin.z + command.direction.z * range,
-				};
-		this.shotId += 1;
-		this.shots.push({
-			id: this.shotId,
-			origin: { ...muzzle },
-			point: { ...end },
-			normal: resolution.hit ? { ...resolution.hit.normal } : null,
-			hit: resolution.hit !== null,
-		});
+	}
 
-		if (resolution.hit)
-			this.emitImpact({
-				weaponId: command.weaponId,
-				damage: resolution.damage,
-				point: resolution.hit.point,
-				colliderHandle: resolution.hit.colliderHandle,
+	private updateCharacters(dt: number): void {
+		if (!this.physics || !this.player) return;
+		const physics = this.physics;
+		const ground = (position: Vec3) => {
+			const hit = physics.raycast(
+				{ x: position.x, y: position.y + 0.8, z: position.z },
+				{ x: 0, y: -1, z: 0 },
+				1.8,
+				this.player!.body,
+				interactionGroups(
+					CollisionLayer.WEAPON_QUERY,
+					CollisionLayer.WORLD_STATIC | CollisionLayer.WORLD_DYNAMIC,
+				),
+			);
+			return hit && hit.normal.y > 0.55
+				? {
+						position: { ...hit.point, y: hit.point.y + 0.045 },
+						normal: hit.normal,
+					}
+				: null;
+		};
+		const attachments = this.getWeaponAttachments();
+		this.characters.update(
+			"local",
+			dt,
+			{
+				feet: this.feet,
+				motion: this.player.movement,
+				aimYaw: this.camera.getYaw(),
+				aimPitch: this.camera.getPitch(),
+				ads: this.adsProgress,
+				hands: attachments,
+				wallPush: this.player.movement.wallNormal,
+			},
+			ground,
+			this.equipment.definition,
+			attachments.pose,
+		);
+		if (this.previewPlayer) {
+			// A movement demonstrator uses the real motor; animation consumes only its state.
+			const before = this.previewTime;
+			this.previewTime += dt;
+			const phase = Math.floor(this.previewTime / 2) % 8;
+			const last = Math.floor(before / 2) % 8;
+			const direction = [
+				{ x: 1, y: 0 },
+				{ x: 0, y: 1 },
+				{ x: -1, y: 0 },
+				{ x: 0, y: -1 },
+			][phase % 4]!;
+			this.previewPlayer.update(dt, {
+				moveX: direction.x,
+				moveY: direction.y,
+				lookYaw: 0,
+				sprintHeld: phase === 4 || phase === 5,
+				crouchHeld: phase === 2,
+				crouchPressed: phase === 5 && last !== phase,
+				jumpHeld: false,
+				jumpPressed: phase === 6 && last !== phase,
 			});
-		if ((command.pellet ?? 0) !== 0) return;
-		this.applyShotRecoil();
+			const feet = this.previewPlayer.getFeetPosition();
+			const eye = { ...feet, y: feet.y + this.previewPlayer.getCameraHeight() };
+			const weapon = this.equipment.primaries[0]!.definition;
+			const pose = resolveWeaponAttachments(
+				weapon,
+				eye,
+				0,
+				0,
+				phase === 3 ? 1 : 0,
+				0,
+				0,
+				0,
+				{ active: false, progress: 0 },
+			);
+			this.characters.update(
+				"preview",
+				dt,
+				{
+					feet,
+					motion: this.previewPlayer.movement,
+					aimYaw: 0,
+					aimPitch: 0,
+					ads: phase === 3 ? 1 : 0,
+					hands: pose,
+					wallPush: this.previewPlayer.movement.wallNormal,
+				},
+				ground,
+				weapon,
+				pose.pose,
+			);
+		}
 	}
 
 	private applyShotRecoil(): void {
@@ -499,7 +770,8 @@ export class GameRuntime {
 
 	private emitUi(force: boolean): void {
 		const reload = this.weapon.reloadProgress;
-		const key = `${this.phase}|${this.weapon.state.ammoInMagazine}|${this.weapon.state.reloadState.type}|${this.weapon.state.aiming}`;
+		const ability = this.abilityUi;
+		const key = `${this.phase}|${this.weapon.state.ammoInMagazine}|${this.weapon.state.reloadState.type}|${this.weapon.state.aiming}|${ability.id}`;
 		if (!force && key === this.lastUiForceKey) {
 			// Still emit at cadence (adsProgress/fps animate); only skip store churn via dedupe there.
 		}
@@ -519,6 +791,12 @@ export class GameRuntime {
 			weaponName: this.equipment.definition.name,
 			selectedWeaponId: this.equipment.definition.id,
 			meleeEquipped: this.equipment.knifeEquipped,
+			abilityId: ability.id,
+			abilityName: ability.name,
+			abilityReady: ability.ready,
+			abilityCooldown: ability.cooldownRemaining,
+			abilityCooldownDuration: ability.cooldownDuration,
+			abilityPulling: ability.pulling,
 			loadout: this.equipment.primaries.map((weapon) => ({
 				id: weapon.definition.id,
 				name: weapon.definition.name,

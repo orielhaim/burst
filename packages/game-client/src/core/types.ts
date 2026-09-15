@@ -22,6 +22,7 @@ export type InputFrame = {
 	crouchHeld: boolean;
 	crouchPressed: boolean;
 	reloadPressed: boolean;
+	specialAbilityPressed: boolean;
 	lookX: number;
 	lookY: number;
 };
@@ -44,6 +45,7 @@ export const EMPTY_INPUT_FRAME: InputFrame = {
 	crouchHeld: false,
 	crouchPressed: false,
 	reloadPressed: false,
+	specialAbilityPressed: false,
 	lookX: 0,
 	lookY: 0,
 };
@@ -64,6 +66,12 @@ export type UiSnapshot = {
 	maxHealth: number;
 	fps: number;
 	weaponName: string;
+	abilityId: string;
+	abilityName: string;
+	abilityReady: boolean;
+	abilityCooldown: number;
+	abilityCooldownDuration: number;
+	abilityPulling: boolean;
 };
 
 export type DebugSnapshot = {

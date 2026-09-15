@@ -49,7 +49,9 @@ function PhysicsAttach() {
 		attachedRef.current = true;
 		devLog("PhysicsAttach: mounting");
 		try {
-			devLog(`PhysicsAttach: world colliders: ${world.colliders.getAll().length}`);
+			devLog(
+				`PhysicsAttach: world colliders: ${world.colliders.getAll().length}`,
+			);
 			const bridge = new RapierBridge(world, rapier);
 			bridgeRef.current = bridge;
 			const map = getMap(runtime.mapId) ?? testYardEntry;
@@ -136,6 +138,7 @@ function PlayerCamera() {
 			perspective.rotation.order = "YXZ";
 			// Layer 1 carries the first-person view model.
 			perspective.layers.enable(1);
+			perspective.layers.enable(2); // Local legs and torso; excluded from the optic camera.
 			perspective.updateProjectionMatrix();
 		}
 		// Children attached to the camera (the weapon view model) only render
@@ -146,6 +149,7 @@ function PlayerCamera() {
 		};
 	}, [camera, scene]);
 
+	// After SimulationDriver so camera + WorldEffects share one fresh renderAlpha.
 	useFrame(() => {
 		const perspective = camera as THREE.PerspectiveCamera;
 		if (!perspective.isPerspectiveCamera) return;
@@ -157,15 +161,15 @@ function PlayerCamera() {
 		}
 		// Interpolated presentation: fixed-step sim snapshots blended by the
 		// driver's accumulator alpha, so high-refresh displays stay smooth.
-		const alpha = runtime.renderAlpha;
-		const { prevCam, cam } = runtime;
-		const eyeX = prevCam.eye.x + (cam.eye.x - prevCam.eye.x) * alpha;
-		const eyeY = prevCam.eye.y + (cam.eye.y - prevCam.eye.y) * alpha;
-		const eyeZ = prevCam.eye.z + (cam.eye.z - prevCam.eye.z) * alpha;
+		const { x: eyeX, y: eyeY, z: eyeZ } = runtime.getRenderEye();
 		perspective.position.set(eyeX, eyeY, eyeZ);
 		perspective.rotation.set(
-			runtime.camera.getPitch() + runtime.camera.getRecoil().pitch + runtime.locomotion.aimPitch.value,
-			runtime.camera.getYaw() + runtime.camera.getRecoil().yaw + runtime.locomotion.aimYaw.value,
+			runtime.camera.getPitch() +
+				runtime.camera.getRecoil().pitch +
+				runtime.locomotion.aimPitch.value,
+			runtime.camera.getYaw() +
+				runtime.camera.getRecoil().yaw +
+				runtime.locomotion.aimYaw.value,
 			runtime.locomotion.cameraRoll.value,
 		);
 	});

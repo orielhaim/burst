@@ -18,6 +18,12 @@ export const DEFAULT_UI: UiSnapshot = {
 	maxHealth: 100,
 	fps: 0,
 	weaponName: "",
+	abilityId: "grapple",
+	abilityName: "Grapple",
+	abilityReady: true,
+	abilityCooldown: 0,
+	abilityCooldownDuration: 0,
+	abilityPulling: false,
 };
 
 type GameStore = {
@@ -46,7 +52,12 @@ function sameUi(a: UiSnapshot, b: UiSnapshot): boolean {
 		a.health === b.health &&
 		a.maxHealth === b.maxHealth &&
 		a.fps === b.fps &&
-		a.weaponName === b.weaponName
+		a.weaponName === b.weaponName &&
+		a.abilityId === b.abilityId &&
+		a.abilityName === b.abilityName &&
+		a.abilityReady === b.abilityReady &&
+		a.abilityPulling === b.abilityPulling &&
+		Math.abs(a.abilityCooldown - b.abilityCooldown) < 0.02
 	);
 }
 

@@ -1,3 +1,4 @@
+import { WORLD_ENVIRONMENT } from "../sim/Environment";
 /** Distances use world metres, speeds m/s, accelerations m/s^2, times seconds, angles radians. */
 export type MovementConfig = {
 	radius: number;
@@ -82,7 +83,7 @@ export const DEFAULT_MOVEMENT_CONFIG: MovementConfig = {
 	sprintDeceleration: 18,
 	reverseBrakingMultiplier: 2.4,
 	jumpVelocity: 9.2,
-	gravity: 28,
+	gravity: -WORLD_ENVIRONMENT.gravity.y,
 	coyoteTime: 0.1,
 	jumpBufferTime: 0.12,
 	jumpGroundGraceTime: 0.12,

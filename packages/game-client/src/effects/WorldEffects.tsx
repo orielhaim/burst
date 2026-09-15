@@ -33,6 +33,7 @@ export function WorldEffects() {
 	const runtime = useGameRuntime();
 	const impacts = useRef<Array<THREE.Mesh | null>>([]);
 	const tracers = useRef<Array<THREE.Mesh | null>>([]);
+	const grappleLine = useRef<THREE.Mesh | null>(null);
 	const activeImpacts = useMemo<Active[]>(
 		() =>
 			Array.from({ length: POOL }, () => ({
@@ -59,9 +60,51 @@ export function WorldEffects() {
 	);
 	const cursor = useMemo(() => ({ impact: 0, tracer: 0 }), []);
 	const scratch = useMemo(() => new THREE.Vector3(), []);
+	const scratchDir = useMemo(() => new THREE.Vector3(), []);
+	const FORWARD_Z = useMemo(() => new THREE.Vector3(0, 0, 1), []);
 
 	useFrame((_, rawDelta) => {
 		const dt = Number.isFinite(rawDelta) ? Math.max(0, rawDelta) : 0;
+
+		// Cable: interpolated torso attach → render-blended hook tip/anchor.
+		// Occlusion in AbilityRuntime severs the line before it can draw through
+		// geometry. Tip uses renderAlpha so flight does not step at 60 Hz.
+		const anchor = runtime.ability.getTip(runtime.renderAlpha);
+		const hookMesh = grappleLine.current;
+		if (hookMesh) {
+			if (!anchor) {
+				hookMesh.visible = false;
+			} else {
+				const start = runtime.getAbilityAttach();
+				let dx = anchor.x - start.x;
+				let dy = anchor.y - start.y;
+				let dz = anchor.z - start.z;
+				let length = Math.hypot(dx, dy, dz);
+				if (length < 0.05) {
+					hookMesh.visible = false;
+				} else {
+					const inv = 1 / length;
+					dx *= inv;
+					dy *= inv;
+					dz *= inv;
+					// Embed slightly into the surface so the cable meets geometry.
+					const pad = 0.06;
+					const endX = anchor.x + dx * pad;
+					const endY = anchor.y + dy * pad;
+					const endZ = anchor.z + dz * pad;
+					length += pad;
+					hookMesh.visible = true;
+					hookMesh.position.set(
+						(start.x + endX) / 2,
+						(start.y + endY) / 2,
+						(start.z + endZ) / 2,
+					);
+					scratchDir.set(dx, dy, dz);
+					hookMesh.quaternion.setFromUnitVectors(FORWARD_Z, scratchDir);
+					hookMesh.scale.set(1, 1, length);
+				}
+			}
+		}
 
 		// Drain new shots (FIFO into the pools).
 		if (runtime.shots.length > 0) {
@@ -159,6 +202,17 @@ export function WorldEffects() {
 
 	return (
 		<group name="world-effects">
+			{/* Grapple hook cable while an anchor pull is active. */}
+			<mesh ref={grappleLine} visible={false}>
+				<boxGeometry args={[0.03, 0.03, 1]} />
+				<meshBasicMaterial
+					color={`#${COLORS.ink.toString(16).padStart(6, "0")}`}
+					transparent
+					opacity={0.92}
+					depthWrite={false}
+					toneMapped={false}
+				/>
+			</mesh>
 			{Array.from({ length: POOL }, (_, i) => (
 				<mesh
 					key={`impact-${i}`}

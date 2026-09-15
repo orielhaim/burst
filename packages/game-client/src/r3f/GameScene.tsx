@@ -1,3 +1,5 @@
+import { WORLD_ENVIRONMENT } from "../sim/Environment";
+import { CharacterView } from "../character/CharacterView";
 import { Physics } from "@react-three/rapier";
 import { Suspense, useEffect, useMemo } from "react";
 import { useThree } from "@react-three/fiber";
@@ -30,22 +32,46 @@ function css(color: number): string {
  *
  * React owns composition/mounting; simulation owns per-frame state.
  */
-export function GameScene({ mapId, debug = false }: { mapId: string; debug?: boolean }) {
+export function GameScene({
+	mapId,
+	debug = false,
+}: {
+	mapId: string;
+	debug?: boolean;
+}) {
 	const physicsDebug = useDebugStore((state) => state.physicsDebug);
 	return (
 		<>
 			<color attach="background" args={[css(COLORS.background)]} />
 			<fog attach="fog" args={[css(COLORS.fog), 40, 90]} />
 			<hemisphereLight args={[0xfff6e8, 0xc4b49a, 1.15]} />
-			<directionalLight position={[18, 32, 12]} intensity={1.05} color={0xfff2dd} />
-			<directionalLight position={[-12, 10, -8]} intensity={0.35} color={0xd4e4ff} />
+			<directionalLight
+				position={[18, 32, 12]}
+				intensity={1.05}
+				color={0xfff2dd}
+			/>
+			<directionalLight
+				position={[-12, 10, -8]}
+				intensity={0.35}
+				color={0xd4e4ff}
+			/>
 			<Suspense fallback={null}>
-				<Physics gravity={[0, -28, 0]} timeStep={1 / 60} debug={physicsDebug}>
+				<Physics
+					gravity={[
+						WORLD_ENVIRONMENT.gravity.x,
+						WORLD_ENVIRONMENT.gravity.y,
+						WORLD_ENVIRONMENT.gravity.z,
+					]}
+					timeStep={1 / 60}
+					debug={physicsDebug}
+				>
 					<RuntimeBootstrap mapId={mapId} debug={debug}>
 						<MapHost mapId={mapId} />
 						<LocalPlayer />
 						<RemotePlayers />
 						<WeaponViewModel />
+						<CharacterView actorId="local" local />
+						<CharacterView actorId="preview" />
 						<WorldEffects />
 					</RuntimeBootstrap>
 				</Physics>

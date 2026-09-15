@@ -10,7 +10,8 @@ export type Action =
 	| "sprint"
 	| "crouch"
 	| "reload"
-	| "melee";
+	| "melee"
+	| "specialAbility";
 
 export type ActionBindings = Record<Action, string[]>;
 
@@ -26,6 +27,7 @@ const DEFAULT_BINDINGS: ActionBindings = {
 	crouch: ["ControlLeft", "ControlRight"],
 	reload: ["KeyR"],
 	melee: ["KeyF"],
+	specialAbility: ["KeyQ"],
 };
 
 /**
@@ -194,6 +196,7 @@ export class Input {
 			crouchHeld: this.held.has("crouch"),
 			crouchPressed: this.pressed.has("crouch"),
 			reloadPressed: this.pressed.has("reload"),
+			specialAbilityPressed: this.pressed.has("specialAbility") && this._pointerLocked,
 			lookX: this._pointerLocked ? look.x : 0,
 			lookY: this._pointerLocked ? look.y : 0,
 		};

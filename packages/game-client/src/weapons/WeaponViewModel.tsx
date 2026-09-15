@@ -82,6 +82,7 @@ function EquippedWeaponView() {
 	const reticle = useRef<THREE.Group | null>(null);
 	const lensMesh = useRef<THREE.Mesh | null>(null);
 	const lensMaterial = useRef<THREE.MeshBasicMaterial | null>(null);
+	const supportHand = useRef<THREE.Group | null>(null);
 
 	const scratch = useMemo(
 		() => ({
@@ -134,7 +135,7 @@ function EquippedWeaponView() {
 		const def = definition.viewModel;
 		const ads = runtime.adsProgress;
 		const blend = smoothstep(ads);
-		const scopeActive = ads >= 0.04;
+		const scopeActive = true;
 
 		pose.current.position.set(
 			lerp(def.hipPose.position[0], def.adsPose.position[0], blend),
@@ -192,8 +193,14 @@ function EquippedWeaponView() {
 				? Math.sin(runtime.equipment.melee.progress * Math.PI)
 				: 0;
 		if (definition.category === "melee") {
-			pose.current.position.z -= swing * definition.swingDistance;
-			pose.current.rotation.y -= swing * definition.swingAngle;
+			// Slash across the view: step forward, then sweep yaw right→left.
+			const slash = swing;
+			pose.current.position.x += slash * 0.08;
+			pose.current.position.y += slash * 0.06;
+			pose.current.position.z -= slash * definition.swingDistance;
+			pose.current.rotation.x -= slash * 0.35;
+			pose.current.rotation.y += slash * definition.swingAngle * 0.55;
+			pose.current.rotation.z -= slash * 0.25;
 		}
 		const reloadProgress = runtime.weapon.reloadProgress;
 		if (
@@ -222,6 +229,15 @@ function EquippedWeaponView() {
 				0.045 * outAmount,
 			);
 			magazine.current.rotation.set(0.22 * outAmount, 0, -0.18 * outAmount);
+			// Move the actual support hand with the magazine, not a separate IK target.
+			if (supportHand.current) {
+				const reach = Math.sin(Math.PI * progress);
+				supportHand.current.position.set(
+					lerp(def.supportGrip[0], def.loadingPoint[0], reach),
+					lerp(def.supportGrip[1], def.loadingPoint[1], reach),
+					lerp(def.supportGrip[2], def.loadingPoint[2], reach),
+				);
+			}
 		} else if (definition.category === "firearm" && reloadProgress.active) {
 			const insertion = Math.sin(reloadProgress.progress * Math.PI);
 			reload.current.position.set(
@@ -236,11 +252,17 @@ function EquippedWeaponView() {
 			);
 			magazine.current.position.set(0, 0, 0);
 			magazine.current.rotation.set(0, 0, 0);
+			if (supportHand.current) {
+				supportHand.current.position.set(...def.supportGrip);
+			}
 		} else {
 			reload.current.position.set(0, 0, 0);
 			reload.current.rotation.set(0, 0, 0);
 			magazine.current.position.set(0, 0, 0);
 			magazine.current.rotation.set(0, 0, 0);
+			if (supportHand.current) {
+				supportHand.current.position.set(...def.supportGrip);
+			}
 		}
 
 		// Probe the intended pose with the collision correction removed. Feeding the
@@ -298,7 +320,36 @@ function EquippedWeaponView() {
 			y: scratch.muzzle.y,
 			z: scratch.muzzle.z,
 		};
-	});
+		const actor = runtime.characters.actors.get("local");
+		if (actor) {
+			// World grip anchors for remote/debug; first-person hands are pure
+			// view-model children and never consume these.
+			const target = (point: readonly [number, number, number]) => {
+				scratch.probe.fromArray(point);
+				model.current!.localToWorld(scratch.probe);
+				return { x: scratch.probe.x, y: scratch.probe.y, z: scratch.probe.z };
+			};
+			const primary = target(def.primaryGrip);
+			const support = supportHand.current
+				? (() => {
+						scratch.probe.set(0, 0, 0);
+						supportHand.current.localToWorld(scratch.probe);
+						return {
+							x: scratch.probe.x,
+							y: scratch.probe.y,
+							z: scratch.probe.z,
+						};
+					})()
+				: target(def.supportGrip);
+			if (definition.category === "melee" && definition.handed === "one") {
+				const actorPose = actor.rig.pose;
+				support.x = actorPose.hips.x + Math.sin(actorPose.bodyYaw) * -0.22;
+				support.y = actorPose.hips.y - 0.02;
+				support.z = actorPose.hips.z + Math.cos(actorPose.bodyYaw) * -0.12;
+			}
+			actor.renderHands = { primary, support };
+		}
+	}, 0);
 
 	const viewModel = definition.viewModel;
 	const magazinePart = viewModel.parts.find(
@@ -325,6 +376,40 @@ function EquippedWeaponView() {
 									ref={muzzle}
 									position={viewModel.muzzlePosition as Vec3Tuple}
 								/>
+								{/* Hands and forearms are children of the weapon model so they
+								    stay welded to the grip through locomotion, recoil, and turns.
+								    Melee uses a plain grip hand — firearm elbow offsets are in
+								    gun-local space and twist badly under the knife's pose. */}
+								{definition.category === "melee" ? (
+									// Grip hand on the blade; the body arm IK attaches at this
+									// same world point via renderHands.
+									<mesh
+										position={viewModel.primaryGrip as Vec3Tuple}
+										castShadow={false}
+									>
+										<boxGeometry args={[0.085, 0.09, 0.1]} />
+										<meshLambertMaterial color="#bca384" />
+									</mesh>
+								) : (
+									<>
+										<ViewArm
+											grip={viewModel.primaryGrip as Vec3Tuple}
+											elbow={
+												[
+													viewModel.primaryGrip[0] + 0.1,
+													viewModel.primaryGrip[1] - 0.34,
+													viewModel.primaryGrip[2] + 0.3,
+												] as Vec3Tuple
+											}
+										/>
+										<group
+											ref={supportHand}
+											position={viewModel.supportGrip as Vec3Tuple}
+										>
+											<ViewArm grip={[0, 0, 0]} elbow={[-0.12, -0.3, 0.22]} />
+										</group>
+									</>
+								)}
 								<group
 									position={viewModel.opticMount.position as Vec3Tuple}
 									rotation={viewModel.opticMount.rotation as Vec3Tuple}
@@ -361,6 +446,45 @@ function WeaponPartMesh({ part }: { part: WeaponPartDefinition }) {
 			<meshLambertMaterial color={css(color)} flatShading />
 			<Edges color={css(COLORS.ink)} />
 		</mesh>
+	);
+}
+
+/** Hand + forearm welded to a grip point in weapon-local space. */
+function ViewArm({
+	grip,
+	elbow,
+}: {
+	grip: Vec3Tuple;
+	elbow: Vec3Tuple;
+}) {
+	const { position, rotation, length } = useMemo(() => {
+		const start = new THREE.Vector3(...grip);
+		const end = new THREE.Vector3(...elbow);
+		const mid = start.clone().add(end).multiplyScalar(0.5);
+		const dir = end.clone().sub(start);
+		const len = Math.max(dir.length(), 1e-4);
+		const quat = new THREE.Quaternion().setFromUnitVectors(
+			new THREE.Vector3(0, 1, 0),
+			dir.normalize(),
+		);
+		const euler = new THREE.Euler().setFromQuaternion(quat);
+		return {
+			position: [mid.x, mid.y, mid.z] as Vec3Tuple,
+			rotation: [euler.x, euler.y, euler.z] as Vec3Tuple,
+			length: len,
+		};
+	}, [grip, elbow]);
+	return (
+		<group position={grip}>
+			<mesh castShadow={false}>
+				<boxGeometry args={[0.075, 0.08, 0.09]} />
+				<meshLambertMaterial color="#bca384" />
+			</mesh>
+			<mesh position={position} rotation={rotation} castShadow={false}>
+				<boxGeometry args={[0.07, length, 0.07]} />
+				<meshLambertMaterial color="#bca384" />
+			</mesh>
+		</group>
 	);
 }
 
@@ -531,7 +655,7 @@ function ScopeLens({
 		const material = lensMaterialRef.current;
 		const lens = lensMeshRef.current;
 		if (!material || !lens) return;
-		const active = runtime.adsProgress >= 0.04;
+		const active = true;
 		if (active !== state.active) {
 			state.active = active;
 			material.map = active ? target.texture : null;
@@ -562,7 +686,7 @@ function ScopeLens({
 			scope.lens.radius * Math.max(state.lensScale.x, state.lensScale.y),
 			eyeRelief,
 		);
-		// Shared optical center: same position/quaternion as the main camera.
+		// The optic and crosshair share the recoil-bearing aim used by simulation.
 		main.getWorldPosition(scopeCamera.position);
 		main.getWorldQuaternion(state.aimQuat);
 		scopeCamera.quaternion.copy(state.aimQuat);

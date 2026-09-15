@@ -3,14 +3,15 @@ import type { ScopeDefinition } from "./optics/ScopeDefinition";
 export type FireMode = "automatic" | "semiAutomatic";
 
 /** Distances use world units, durations use seconds, and fire rate uses RPM. */
-export type ProjectileDefinition =
-	| { readonly type: "hitscan"; readonly range: number }
-	| {
-			readonly type: "projectile";
-			readonly speed: number;
-			readonly gravity: number;
-			readonly lifetime: number;
-	  };
+export type ProjectileDefinition = {
+	/** SI units: m/s, kg, and kg/m². BC = mass / (drag coefficient * area).
+	 * This is an effective SI coefficient, not a G1/G7 catalog number. */
+	readonly muzzleVelocity: number;
+	readonly mass: number;
+	readonly ballisticCoefficient: number;
+	readonly baseDamage: number;
+	readonly headshotMultiplier: number;
+};
 
 export type ReloadDefinition =
 	| {
@@ -28,8 +29,10 @@ export type ReloadDefinition =
 	  };
 
 export type RecoilProfile = {
+	/** Instantaneous camera displacement in radians. */
 	readonly cameraPitch: number;
 	readonly cameraYaw: number;
+	/** View-model spring velocity impulse. */
 	readonly visualKick: number;
 };
 
@@ -65,6 +68,9 @@ export type WeaponPartDefinition =
 export type WeaponViewModelDefinition = {
 	readonly hipPose: WeaponPose;
 	readonly adsPose: WeaponPose;
+	readonly primaryGrip: readonly [number, number, number];
+	readonly supportGrip: readonly [number, number, number];
+	readonly loadingPoint: readonly [number, number, number];
 	readonly muzzlePosition: readonly [number, number, number];
 	readonly opticMount: WeaponPose;
 	readonly obstruction: {
@@ -101,7 +107,6 @@ export interface WeaponDefinition {
 	readonly motion: MotionDefinition;
 	readonly id: string;
 	readonly name: string;
-	readonly damage: number;
 	readonly fireMode: FireMode;
 	readonly roundsPerMinute: number;
 	readonly projectile: ProjectileDefinition;
@@ -131,19 +136,6 @@ export type FireWeaponCommand = {
 	projectile: ProjectileDefinition;
 };
 
-export type FireHit = {
-	colliderHandle?: number;
-	point: { x: number; y: number; z: number };
-	normal: { x: number; y: number; z: number };
-	distance: number;
-};
-
-export type FireResolution = {
-	command: FireWeaponCommand;
-	hit: FireHit | null;
-	damage: number;
-};
-
 export interface MeleeDefinition {
 	readonly category: "melee";
 	readonly id: string;
@@ -158,6 +150,7 @@ export interface MeleeDefinition {
 	readonly holdThreshold: number;
 	readonly swingDistance: number;
 	readonly swingAngle: number;
+	readonly handed: "one" | "two";
 	readonly equip: EquipDefinition;
 	readonly motion: MotionDefinition;
 	readonly viewModel: WeaponViewModelDefinition;

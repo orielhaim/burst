@@ -93,6 +93,40 @@ export function Hud({ ui, debug, showDebug }: HudProps) {
 				</div>
 			</div>
 
+			{/* Special ability (Q) */}
+			<div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-center">
+				<div className="font-mono text-xs uppercase tracking-[0.2em] text-[#1c1814]/60">
+					Q · {ui.abilityName}
+				</div>
+				<div
+					className={`mx-auto mt-1 h-1.5 w-28 overflow-hidden rounded-sm border border-[#1c1814]/25 bg-[#1c1814]/10`}
+				>
+					<div
+						className={`h-full origin-left transition-transform duration-75 ${
+							ui.abilityPulling
+								? "bg-[#e85d4c]"
+								: ui.abilityReady
+									? "bg-[#1c1814]"
+									: "bg-[#1c1814]/40"
+						}`}
+						style={{
+							transform: `scaleX(${
+								ui.abilityPulling
+									? 1
+									: ui.abilityCooldownDuration <= 0
+										? 1
+										: 1 - ui.abilityCooldown / ui.abilityCooldownDuration
+							})`,
+						}}
+					/>
+				</div>
+				{ui.abilityPulling && (
+					<div className="mt-1 font-mono text-[11px] uppercase tracking-[0.15em] text-[#e85d4c]">
+						Pulling · jump or Q to release
+					</div>
+				)}
+			</div>
+
 			{/* Dev FPS / debug */}
 			{showDebug && (
 				<div className="absolute left-4 top-4 rounded border border-[#1c1814]/20 bg-[#f2ead8]/80 px-2 py-1 font-mono text-[11px] leading-relaxed text-[#1c1814]">

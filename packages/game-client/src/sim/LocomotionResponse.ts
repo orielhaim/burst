@@ -61,11 +61,17 @@ export class LocomotionResponse {
 		const grip = 1 - ads * 0.82;
 		const run = clamp((Math.abs(forward) - 6.2) / 2.9, 0, 1);
 		const slide = motion.sliding ? Math.min(1, motion.horizontalSpeed / 9.1) : 0;
+		// Airborne vertical impulses used to shove the view-model off the camera
+		// line, so the grip hands appeared to bob free of the weapon. Keep a
+		// light landing feel without letting jump apex/liftoff yank the gun.
+		const air = motion.grounded ? 1 : 0.22;
 		this.x.step((-right * 0.002 - lateralForce * 0.00045 - yawRate * 0.009 + step * load * 0.004) * grip, 15, dt);
-		this.y.step((-this.acceleration.y * 0.00065 + foot * load * 0.0035 - slide * 0.055) * grip, 14, dt);
+		this.y.step((-this.acceleration.y * 0.00065 * air + foot * load * 0.0035 - slide * 0.055) * grip, 14, dt);
 		this.z.step((forwardForce * 0.0007 + Math.abs(forward) * 0.0015) * grip, 15, dt);
-		this.pitch.step((forwardForce * 0.0009 - this.acceleration.y * 0.0007 - velocity.y * 0.0015 - pitchRate * 0.014 + foot * load * 0.004) * grip, 14, dt);
-		this.yaw.step((-lateralForce * 0.00065 - yawRate * 0.018) * grip, 14, dt);
+		this.pitch.step((forwardForce * 0.0009 - this.acceleration.y * 0.0007 * air - velocity.y * 0.0015 * air - pitchRate * 0.014 + foot * load * 0.004) * grip, 14, dt);
+		// Slightly softer turn inertia so the weapon (and its hands) follow the
+		// camera instead of swinging behind the body during a flick.
+		this.yaw.step((-lateralForce * 0.00065 - yawRate * 0.012) * grip, 16, dt);
 		this.roll.step((right * 0.005 + lateralForce * 0.001 + step * load * 0.007 + slide * 0.13) * grip, 13, dt);
 		// These offsets also feed shot direction, so the optic and actual aim agree.
 		const steadiness = 1 - ads * 0.55;

@@ -28,6 +28,7 @@ export class PlayerController {
 	private lastUsedWallNormal: Vec3 | null = null;
 	private lastWallJumpTime = Number.NEGATIVE_INFINITY;
 	private lastWallJumpPosition: Vec3 | null = null;
+	private pendingImpulse: Vec3 = { x: 0, y: 0, z: 0 };
 
 	constructor(physics: CharacterPhysics, spawn: Vec3, config: MovementConfig = DEFAULT_MOVEMENT_CONFIG) {
 		this.config = config;
@@ -45,6 +46,14 @@ export class PlayerController {
 		if (this.movement.sliding) return this.config.slideEyeHeight;
 		if (this.movement.crouched) return this.config.crouchingEyeHeight;
 		return this.config.standingEyeHeight;
+	}
+
+	applyImpulse(impulse: Vec3): void {
+		this.pendingImpulse = {
+			x: this.pendingImpulse.x + impulse.x,
+			y: this.pendingImpulse.y + impulse.y,
+			z: this.pendingImpulse.z + impulse.z,
+		};
 	}
 
 	teleport(position: Vec3): boolean {
@@ -115,6 +124,21 @@ export class PlayerController {
 			: this.updateLocomotion(dt, incoming, wish, input.movementSpeedMultiplier ?? 1, ground);
 		if (!ground) next.y = Math.max(-cfg.maxFallSpeed, next.y - cfg.gravity * dt);
 		next = this.tryConsumeJump(next, position, ground !== null, input);
+		// Ability-owned motion (grapple) fully replaces this step's velocity so
+		// locomotion/friction/gravity cannot fight the pull and cause vibration.
+		if (input.velocityOverride) {
+			next = {
+				x: input.velocityOverride.x,
+				y: input.velocityOverride.y,
+				z: input.velocityOverride.z,
+			};
+		}
+		next = {
+			x: next.x + this.pendingImpulse.x,
+			y: next.y + this.pendingImpulse.y,
+			z: next.z + this.pendingImpulse.z,
+		};
+		this.pendingImpulse = { x: 0, y: 0, z: 0 };
 		const capped = clampHorizontal(next, cfg.physicalHorizontalSpeedCap);
 		next.x = capped.x;
 		next.z = capped.z;

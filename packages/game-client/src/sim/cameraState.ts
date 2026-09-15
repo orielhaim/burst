@@ -70,8 +70,8 @@ export class CameraState {
 	}
 
 	addRecoil(pitch: number, yaw: number): void {
-		this.recoilPitchVel += pitch;
-		this.recoilYawVel += yaw;
+		this.recoilPitch += pitch;
+		this.recoilYaw += yaw;
 	}
 
 	forward(pitchOffset = 0, yawOffset = 0): Vec3 {
@@ -84,8 +84,7 @@ export class CameraState {
 	}
 
 	/**
-	 * Critically-damped-ish recoil spring. Matches the old PlayerCamera feel:
-	 * stiffness 90, damping 14 with exponential decay.
+	 * Shot angles are radians of displacement; the spring recovers after the impulse.
 	 */
 	updateRecoil(dt: number): void {
 		const stiffness = 90;

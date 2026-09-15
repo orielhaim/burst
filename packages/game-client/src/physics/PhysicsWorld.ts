@@ -1,3 +1,4 @@
+import { WORLD_ENVIRONMENT } from "../sim/Environment";
 import RAPIER from "@dimforge/rapier3d-compat";
 import type { Vec3 } from "../core/types";
 import { CollisionGroups, groupsInteract } from "./CollisionGroups";
@@ -34,7 +35,7 @@ export class PhysicsWorld implements CharacterPhysics {
 	private readonly colliders: RAPIER.Collider[] = [];
 	private readonly bodies: RAPIER.RigidBody[] = [];
 
-	constructor(gravity: Vec3 = { x: 0, y: -28, z: 0 }) {
+	constructor(gravity: Vec3 = WORLD_ENVIRONMENT.gravity) {
 		this.world = new RAPIER.World(gravity);
 	}
 
@@ -132,8 +133,12 @@ export class PhysicsWorld implements CharacterPhysics {
 			false,
 		);
 		controller.enableSnapToGround(options?.groundSnapDistance ?? 0.12);
-		controller.setMaxSlopeClimbAngle(options?.maxWalkableSlope ?? Math.PI * 0.28);
-		controller.setMinSlopeSlideAngle(options?.maxWalkableSlope ?? Math.PI * 0.3);
+		controller.setMaxSlopeClimbAngle(
+			options?.maxWalkableSlope ?? Math.PI * 0.28,
+		);
+		controller.setMinSlopeSlideAngle(
+			options?.maxWalkableSlope ?? Math.PI * 0.3,
+		);
 		controller.setApplyImpulsesToDynamicBodies(false);
 		this.bodies.push(body);
 		this.colliders.push(collider);
@@ -158,7 +163,11 @@ export class PhysicsWorld implements CharacterPhysics {
 		);
 		const movement = controller.computedMovement();
 		const collisionNormals: Vec3[] = [];
-		for (let index = 0; index < controller.numComputedCollisions(); index += 1) {
+		for (
+			let index = 0;
+			index < controller.numComputedCollisions();
+			index += 1
+		) {
 			const collision = controller.computedCollision(index);
 			if (collision) collisionNormals.push(normalize(collision.normal1));
 		}
@@ -178,7 +187,11 @@ export class PhysicsWorld implements CharacterPhysics {
 	): Vec3 | null {
 		const clearanceEpsilon = 0.005;
 		const candidates: Vec3[] = [{ ...desired }];
-		for (let ring = radius * 2.25; ring <= searchRadius; ring += radius * 2.25) {
+		for (
+			let ring = radius * 2.25;
+			ring <= searchRadius;
+			ring += radius * 2.25
+		) {
 			for (let index = 0; index < 12; index += 1) {
 				const angle = (index / 12) * Math.PI * 2;
 				candidates.push({
@@ -201,7 +214,11 @@ export class PhysicsWorld implements CharacterPhysics {
 					collider !== excludeCollider &&
 					!collider.isSensor() &&
 					groupsInteract(CollisionGroups.player, collider.collisionGroups()) &&
-					collider.intersectsShape(shape, { ...candidate }, { x: 0, y: 0, z: 0, w: 1 }),
+					collider.intersectsShape(
+						shape,
+						{ ...candidate },
+						{ x: 0, y: 0, z: 0, w: 1 },
+					),
 			);
 			if (!overlap) return candidate;
 		}

@@ -25,8 +25,12 @@ export const WeaponRegistry = {
 			definition.equip.raiseDuration <= 0
 		)
 			throw new Error(`Invalid equip timing: ${definition.id}`);
-		if (definition.category === "firearm") validateReload(definition);
-		else if (
+		if (definition.category === "firearm") {
+			validateReload(definition);
+			for (const value of Object.values(definition.projectile))
+				if (!Number.isFinite(value) || value <= 0)
+					throw new Error(`Invalid projectile profile: ${definition.id}`);
+		} else if (
 			definition.range <= 0 ||
 			definition.hitWindow <= 0 ||
 			definition.attackInterval <= 0 ||

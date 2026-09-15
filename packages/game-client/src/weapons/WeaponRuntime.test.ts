@@ -37,7 +37,7 @@ describe("WeaponRuntime", () => {
 	test("keeps definitions immutable and the rifle fully specified", () => {
 		expect(Object.isFrozen(rifleDefinition)).toBe(true);
 		expect(Object.isFrozen(rifleDefinition.reload)).toBe(true);
-		expect(rifleDefinition.projectile).toEqual({ type: "hitscan", range: 80 });
+		expect(rifleDefinition.projectile.muzzleVelocity).toBe(850);
 		expect(ScopeRegistry.require(rifleDefinition.opticId).magnification).toBe(
 			1.25,
 		);
@@ -150,10 +150,10 @@ describe("WeaponRuntime", () => {
 			simulationTick: 1,
 			origin: { x: 1, y: 2, z: 3 },
 			direction: { x: 0, y: 0, z: -2 },
-			projectile: { type: "projectile", speed: 50, gravity: 9.81, lifetime: 2 },
+			projectile: { ...rifleDefinition.projectile, muzzleVelocity: 50 },
 		});
 		expect(launch.velocity).toEqual({ x: 0, y: 0, z: -50 });
-		expect(launch.lifetimeRemaining).toBe(2);
+		expect(launch.age).toBe(0);
 	});
 
 	test("scope FOV produces the requested apparent magnification", () => {

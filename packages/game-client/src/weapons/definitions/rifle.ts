@@ -16,10 +16,15 @@ export const rifleDefinition = WeaponRegistry.register({
 		insertDistance: 0.09,
 	},
 	name: "Rifle",
-	damage: 22,
 	fireMode: "automatic",
 	roundsPerMinute: 480,
-	projectile: { type: "hitscan", range: 80 },
+	projectile: {
+		muzzleVelocity: 850,
+		mass: 0.004,
+		ballisticCoefficient: 500,
+		baseDamage: 22,
+		headshotMultiplier: 2,
+	},
 	magazineSize: 30,
 	autoReloadOnEmpty: true,
 	reload: {
@@ -30,8 +35,8 @@ export const rifleDefinition = WeaponRegistry.register({
 	hipSpread: 0.012,
 	adsSpread: 0.006,
 	recoil: {
-		hip: { cameraPitch: 0.012, cameraYaw: 0.004, visualKick: 1.2 },
-		ads: { cameraPitch: 0.009, cameraYaw: 0.003, visualKick: 0.8 },
+		hip: { cameraPitch: 0.0054, cameraYaw: 0.0018, visualKick: 2.88 },
+		ads: { cameraPitch: 0.00405, cameraYaw: 0.00135, visualKick: 1.92 },
 	},
 	ads: {
 		enterDuration: 0.18,
@@ -48,6 +53,9 @@ export const rifleDefinition = WeaponRegistry.register({
 			position: [0, -0.095, -0.34],
 			rotation: [0, 0, 0],
 		},
+		primaryGrip: [0, -0.08, 0.08],
+		supportGrip: [0, -0.04, -0.32],
+		loadingPoint: [0, -0.18, -0.08],
 		muzzlePosition: [0, 0.01, -0.68],
 		opticMount: {
 			position: [0, 0.095, -0.05],

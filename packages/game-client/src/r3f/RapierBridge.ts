@@ -16,7 +16,7 @@ type RapierModule = typeof RAPIER;
  * `CharacterPhysics` backed by the `@react-three/rapier`-owned world.
  * The R3F `<Physics>` component owns the world, steps it, and creates map
  * colliders declaratively; this bridge gives the framework-independent
- * simulation (player motor, detectors, hitscan, obstruction) query access
+ * simulation (player motor, detectors, ballistics, obstruction) query access
  * plus kinematic player-body management (character-controller oriented —
  * never a generic dynamic body).
  */
@@ -67,7 +67,11 @@ export class RapierBridge implements CharacterPhysics {
 	): Vec3 | null {
 		const clearanceEpsilon = 0.005;
 		const candidates: Vec3[] = [{ ...desired }];
-		for (let ring = radius * 2.25; ring <= searchRadius; ring += radius * 2.25) {
+		for (
+			let ring = radius * 2.25;
+			ring <= searchRadius;
+			ring += radius * 2.25
+		) {
 			for (let index = 0; index < 12; index += 1) {
 				const angle = (index / 12) * Math.PI * 2;
 				candidates.push({
@@ -79,7 +83,9 @@ export class RapierBridge implements CharacterPhysics {
 		}
 		// Query the live R3F world (declarative colliders included).
 		const all = this.world.colliders.getAll();
-		devLog(`spawn search: ${all.length} colliders, ${candidates.length} candidates`);
+		devLog(
+			`spawn search: ${all.length} colliders, ${candidates.length} candidates`,
+		);
 		for (const [candidateIndex, candidate] of candidates.entries()) {
 			// Fresh shape + rotation per candidate: the compat bindings guard
 			// against reusing an object that is still borrowed ("recursive use
@@ -92,9 +98,16 @@ export class RapierBridge implements CharacterPhysics {
 			let overlapCount = 0;
 			for (const collider of all) {
 				if (collider === excludeCollider || collider.isSensor()) continue;
-				if (!groupsInteract(CollisionGroups.player, collider.collisionGroups())) continue;
+				if (!groupsInteract(CollisionGroups.player, collider.collisionGroups()))
+					continue;
 				try {
-					if (collider.intersectsShape(shape, { ...candidate }, { x: 0, y: 0, z: 0, w: 1 })) {
+					if (
+						collider.intersectsShape(
+							shape,
+							{ ...candidate },
+							{ x: 0, y: 0, z: 0, w: 1 },
+						)
+					) {
 						overlap = true;
 						overlapCount += 1;
 						if (candidateIndex === 0 && overlapCount <= 3) {
@@ -104,11 +117,18 @@ export class RapierBridge implements CharacterPhysics {
 								const l = collider.translationWrtParent();
 								const parent = collider.parent();
 								const pt = parent ? parent.translation() : null;
-								info = { world: t, local: l, body: pt, shape: collider.shapeType() };
+								info = {
+									world: t,
+									local: l,
+									body: pt,
+									shape: collider.shapeType(),
+								};
 							} catch {
 								info = "unavailable";
 							}
-							devLog(`spawn search: candidate 0 blocked by ${JSON.stringify(info)}`);
+							devLog(
+								`spawn search: candidate 0 blocked by ${JSON.stringify(info)}`,
+							);
 						} else {
 							break;
 						}
@@ -117,7 +137,10 @@ export class RapierBridge implements CharacterPhysics {
 					// A stale (removed) collider handle throws instead of
 					// returning false. Skip it — but log, since it means
 					// disposal missed something.
-					devLog(`spawn search: stale collider at candidate ${candidateIndex}:`, error);
+					devLog(
+						`spawn search: stale collider at candidate ${candidateIndex}:`,
+						error,
+					);
 				}
 			}
 			if (!overlap) {
@@ -183,8 +206,12 @@ export class RapierBridge implements CharacterPhysics {
 			false,
 		);
 		controller.enableSnapToGround(options?.groundSnapDistance ?? 0.12);
-		controller.setMaxSlopeClimbAngle(options?.maxWalkableSlope ?? Math.PI * 0.28);
-		controller.setMinSlopeSlideAngle(options?.maxWalkableSlope ?? Math.PI * 0.3);
+		controller.setMaxSlopeClimbAngle(
+			options?.maxWalkableSlope ?? Math.PI * 0.28,
+		);
+		controller.setMinSlopeSlideAngle(
+			options?.maxWalkableSlope ?? Math.PI * 0.3,
+		);
 		controller.setApplyImpulsesToDynamicBodies(false);
 		this.controllers.push(controller);
 		const created = { body, collider, controller };
@@ -202,11 +229,15 @@ export class RapierBridge implements CharacterPhysics {
 
 	/** Remove every player body created through this bridge. */
 	disposePlayerBodies(): void {
-		devLog(`disposePlayerBodies: ${this.playerBodies.length} bodies, world colliders: ${this.world.colliders.getAll().length}`);
+		devLog(
+			`disposePlayerBodies: ${this.playerBodies.length} bodies, world colliders: ${this.world.colliders.getAll().length}`,
+		);
 		for (const created of this.playerBodies.splice(0)) {
 			this.removePlayerBody(created);
 		}
-		devLog(`disposePlayerBodies: done, world colliders: ${this.world.colliders.getAll().length}`);
+		devLog(
+			`disposePlayerBodies: done, world colliders: ${this.world.colliders.getAll().length}`,
+		);
 	}
 
 	/** Remove a player body created through this bridge. */
@@ -251,7 +282,11 @@ export class RapierBridge implements CharacterPhysics {
 		);
 		const movement = controller.computedMovement();
 		const collisionNormals: Vec3[] = [];
-		for (let index = 0; index < controller.numComputedCollisions(); index += 1) {
+		for (
+			let index = 0;
+			index < controller.numComputedCollisions();
+			index += 1
+		) {
 			const collision = controller.computedCollision(index);
 			if (collision) collisionNormals.push(normalize(collision.normal1));
 		}

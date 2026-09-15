@@ -8,7 +8,7 @@ import type { Vec3 } from "../core/types";
  * interface for unit tests. The R3F runtime provides `RapierBridge`, backed by
  * the `@react-three/rapier` world, so simulation code never owns a world.
  *
- * Simulation modules (PlayerController, PlayerMotor, detectors, hitscan,
+ * Simulation modules (PlayerController, PlayerMotor, detectors, ballistics,
  * obstruction) depend only on this interface — never on a concrete world.
  */
 export type CharacterBody = {

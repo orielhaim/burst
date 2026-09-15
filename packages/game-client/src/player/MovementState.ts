@@ -14,6 +14,12 @@ export interface MovementInput {
 	lookPitch?: number;
 	aimHeld?: boolean;
 	movementSpeedMultiplier?: number;
+	/**
+	 * When set, this step's motion uses exactly this velocity (m/s) instead of
+	 * locomotion + gravity. Used by special abilities (grapple pull) so external
+	 * motion is not damped, steered, or gravity-stripped every tick.
+	 */
+	velocityOverride?: Vec3 | null;
 }
 
 export type MovementRuntimeState = {
