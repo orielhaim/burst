@@ -1,9 +1,9 @@
 /**
  * @burst/game-client — R3F + @react-three/rapier game client.
  *
+ * Visual identity: tiny doodle fighters on a messy desk / notebook world.
  * React owns composition/mounting (r3f/, maps/, player/, weapons/ .tsx).
  * Simulation owns per-frame state (runtime/, sim/, movement/weapon rules).
- * Framework-independent rules never import three/react/r3f.
  */
 
 // —— framework-independent core (safe for future server sim) ——
@@ -11,6 +11,7 @@ export type { Action, ActionBindings } from "./core/Input";
 export { Input } from "./core/Input";
 export type {
 	DebugSnapshot,
+	GameMode,
 	GamePhase,
 	InputFrame,
 	UiSnapshot,
@@ -40,6 +41,7 @@ export {
 	DEFAULT_PLAYER_CONFIG,
 	PlayerController,
 } from "./player/PlayerController";
+export type { KillZone } from "./player/PlayerController";
 export {
 	CameraState,
 	DEFAULT_CAMERA_STATE_CONFIG,
@@ -50,7 +52,7 @@ export {
 	magnifiedFovDegrees,
 	scopeTargetSize,
 } from "./sim/scopeMath";
-export { COLORS } from "./rendering/palette";
+export { COLORS, css } from "./rendering/palette";
 export type { PaletteColor } from "./rendering/palette";
 export type {
 	ReticleDefinition,
@@ -69,6 +71,17 @@ export { WeaponRuntime } from "./weapons/WeaponRuntime";
 // —— mutable runtime (no React state per frame) ——
 export { GameRuntime } from "./runtime/GameRuntime";
 export type { RuntimeOptions, ShotEvent } from "./runtime/GameRuntime";
+export { EntryDrop, ENTRY_DROP_CONFIG } from "./runtime/entryDrop";
+export { ChaosDrops } from "./chaos/ChaosDrops";
+export {
+	DESK_CHAOS_AREA,
+	scheduleChaosDrops,
+} from "./chaos/schedule";
+export type {
+	ChaosArea,
+	ChaosDropKind,
+	ChaosDropSpec,
+} from "./chaos/schedule";
 export {
 	GameRuntimeContext,
 	useGameRuntime,
@@ -83,19 +96,65 @@ export { RapierBridge } from "./r3f/RapierBridge";
 export { LocalPlayer, RemotePlayers } from "./player/LocalPlayer";
 export { WeaponViewModel } from "./weapons/WeaponViewModel";
 export { WorldEffects } from "./effects/WorldEffects";
+
+// —— map system (data-driven kit) ——
+export type {
+	MapBounds,
+	MapDefinition,
+	MapSpawn,
+	PropComponentProps,
+	PropId,
+	PropInstance,
+	PropVariant,
+	Vec3Tuple,
+} from "./maps/types";
 export {
-	Crate,
-	Floor,
-	Pillar,
-	Platform,
-	Ramp,
-	SolidBox,
-	SpawnPoint,
-	Wall,
-} from "./maps/primitives";
-export { TestYard } from "./maps/TestYard";
-export { getMap, listMaps, registerMap, testYardEntry } from "./maps/registry";
-export type { MapEntry, MapSpawn } from "./maps/registry";
+	DEFAULT_MAP_ID,
+	getMapBounds,
+	getMapDefinition,
+	getMapSpawns,
+	MAP_DEFINITIONS,
+} from "./maps/definitions";
+export {
+	deskBattlefieldEntry,
+	getMap,
+	listMaps,
+	paperIslandEntry,
+	registerMap,
+} from "./maps/registry";
+export type { MapEntry } from "./maps/registry";
+export { PROP_CATALOG, resolveProp } from "./maps/kit/propCatalog";
+export { MapFromDefinition } from "./maps/MapFromDefinition";
+export { DeskBattlefield } from "./maps/DeskBattlefield";
+export { deskBattlefieldDefinition } from "./maps/deskBattlefieldDef";
+export { ChaosDesk } from "./maps/ChaosDesk";
+export { chaosDeskDefinition } from "./maps/chaosDeskDef";
+export { PaperIsland } from "./maps/PaperIsland";
+export { paperIslandDefinition } from "./maps/paperIslandDef";
+export {
+	Book,
+	BookStack,
+	CoverBlock,
+	DeskLeg,
+	DeskSlab,
+	Eraser,
+	Laptop,
+	Monitor,
+	Mug,
+	NotebookClosed,
+	NotebookOpen,
+	Paperclip,
+	PaperSlip,
+	PaperStack,
+	Pen,
+	Pencil,
+	Phone,
+	RoomFloor,
+	Ruler,
+	SpawnPad,
+	Sticky,
+	TapeRoll,
+} from "./maps/kit/props";
 
 export { WeaponLoadout } from "./weapons/WeaponLoadout";
 export { MeleeRuntime } from "./weapons/MeleeRuntime";
@@ -117,6 +176,7 @@ export type {
 } from "./character/ProceduralCharacter";
 export { CharacterWorld } from "./character/CharacterWorld";
 export { CharacterView } from "./character/CharacterView";
+export { DoodleHead } from "./character/DoodleHead";
 export { HitRegions } from "./character/HitRegions";
 export {
 	ProjectileSimulation,

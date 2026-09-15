@@ -1,5 +1,5 @@
-import { lazy, Suspense } from "react";
-import { useGameStore } from "@burst/game-client";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { useGameStore, type GameMode } from "@burst/game-client";
 import { GameCanvas } from "./GameCanvas";
 import { GameErrorBoundary } from "./GameErrorBoundary";
 import { Hud } from "./Hud";
@@ -10,21 +10,25 @@ const DevLeva = lazy(() =>
 );
 
 /**
- * Canvas host + React UI overlay.
- * R3F owns renderer/scene/camera/loop inside GameCanvas; React reads
- * low-frequency snapshots from the game store for HUD/menus.
+ * Canvas host + React UI overlay for the desk / notebook doodle world.
+ * Mode (classic / chaos) is chosen before Play; parachute entry always runs.
  */
-export function GameShell({ mapId = "test-yard" }: { mapId?: string }) {
+export function GameShell({ mapId = "desk-battlefield" }: { mapId?: string }) {
 	const ui = useGameStore((state) => state.ui);
 	const debug = useGameStore((state) => state.debug);
 	const runtime = useGameStore((state) => state.runtime);
 	const ready = runtime !== null;
+	const [mode, setMode] = useState<GameMode>("classic");
+
+	useEffect(() => {
+		runtime?.setMode(mode);
+	}, [runtime, mode]);
 
 	return (
-		<div className="relative h-screen w-screen overflow-hidden bg-[#f2ead8]">
+		<div className="relative h-screen w-screen overflow-hidden bg-[#f6f0e2]">
 			<div className="absolute inset-0">
 				<GameErrorBoundary>
-					<GameCanvas mapId={mapId} />
+					<GameCanvas mapId={mapId} mode={mode} />
 				</GameErrorBoundary>
 			</div>
 			<Hud ui={ui} debug={debug} showDebug={import.meta.env.DEV} />
@@ -32,7 +36,12 @@ export function GameShell({ mapId = "test-yard" }: { mapId?: string }) {
 				phase={ui.phase}
 				ready={ready}
 				error={null}
-				onPlay={() => runtime?.play()}
+				mode={mode}
+				onModeChange={setMode}
+				onPlay={() => {
+					runtime?.setMode(mode);
+					runtime?.play();
+				}}
 				onResume={() => runtime?.resume()}
 			/>
 			{import.meta.env.DEV ? (

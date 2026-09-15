@@ -1,18 +1,18 @@
-import { useRapier, useAfterPhysicsStep } from "@react-three/rapier";
+import { useRapier, useAfterPhysicsStep, useBeforePhysicsStep } from "@react-three/rapier";
 import { useEffect, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { RapierBridge } from "../r3f/RapierBridge";
 import { useGameRuntime } from "../runtime/GameRuntimeContext";
 import { devLog } from "../runtime/log";
-import { getMap, testYardEntry } from "../maps/registry";
+import { getMapSpawns } from "../maps/definitions";
 
-const FIXED_DT = 1 / 60;
+import { PresentationClock, FIXED_DT } from "../sim/PresentationClock";
 
 /**
  * LocalPlayer composition:
  * ├── PhysicsAttach  (bridge R3F world → runtime sim, kinematic controller body)
- * ├── SimulationDriver (fixed-step accumulator → runtime.fixedUpdate)
+ * ├── SimulationDriver (Rapier before-step callback → runtime.fixedUpdate)
  * ├── PlayerCamera   (R3F camera = gameplay camera, presentation only)
  * └── PlayerPresence (landing spot for future remote-player interpolation)
  *
@@ -54,14 +54,15 @@ function PhysicsAttach() {
 			);
 			const bridge = new RapierBridge(world, rapier);
 			bridgeRef.current = bridge;
-			const map = getMap(runtime.mapId) ?? testYardEntry;
-			const spawn = map.spawns[0] ?? {
-				position: { x: 0, y: 1.2, z: 0 },
+			const spawnList = getMapSpawns(runtime.mapId);
+			const spawn = spawnList[0] ?? {
+				position: { x: 0, y: 1.5, z: 0 },
 				yaw: 0,
 			};
 			runtime.physicsInfo = bridge.describe();
 			devLog(`PhysicsAttach: bridge: ${runtime.physicsInfo}`);
 			runtime.attachPhysics(bridge, { ...spawn.position }, spawn.yaw);
+			devLog(`PhysicsAttach: attached map ${runtime.mapId}`);
 			devLog("PhysicsAttach: attached");
 		} catch (error) {
 			devLog("PhysicsAttach failed:", error);
@@ -88,13 +89,17 @@ function PhysicsAttach() {
 
 function SimulationDriver() {
 	const runtime = useGameRuntime();
-	const accumulator = useRef(0);
+	const clock = useRef(new PresentationClock());
+	useBeforePhysicsStep(() => {
+		clock.current.physicsStep();
+		runtime.fixedUpdate(FIXED_DT);
+	});
 	const fpsState = useRef({ frames: 0, elapsed: 0, fps: 0 });
 
+	// Input first (-100), Rapier and gameplay together (-50), then presentation
+	// alpha (-40). No second loop may advance gameplay or discard its backlog.
 	useFrame((_, rawDelta) => {
-		const delta = Number.isFinite(rawDelta)
-			? Math.max(0, Math.min(rawDelta, 0.25))
-			: 0;
+		const delta = clock.current.beginFrame(rawDelta);
 		// FPS averaged over 0.5s windows (same cadence as the old GameClock).
 		const fps = fpsState.current;
 		fps.frames += 1;
@@ -104,24 +109,15 @@ function SimulationDriver() {
 			fps.frames = 0;
 			fps.elapsed = 0;
 		}
-		if (runtime.phase === "playing") {
+		if (runtime.phase === "playing" || runtime.phase === "dropping") {
 			const look = runtime.input.consumeLookDelta();
 			runtime.camera.applyLookDelta(look.x, look.y);
 		}
-		accumulator.current += delta;
-		let steps = 0;
-		while (accumulator.current >= FIXED_DT && steps < 5) {
-			runtime.fixedUpdate(FIXED_DT);
-			accumulator.current -= FIXED_DT;
-			steps += 1;
-		}
-		if (steps === 5) accumulator.current = 0;
-		runtime.renderAlpha = Math.max(
-			0,
-			Math.min(1, accumulator.current / FIXED_DT),
-		);
 		runtime.frameTick(delta, fps.fps);
-	});
+	}, -100);
+	useFrame(() => {
+		runtime.renderAlpha = runtime.phase === "paused" ? 1 : clock.current.alpha;
+	}, -40);
 	return null;
 }
 

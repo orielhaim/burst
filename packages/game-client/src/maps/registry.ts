@@ -1,23 +1,44 @@
 import type { ComponentType } from "react";
-import type { Vec3 } from "../core/types";
-import { TestYard } from "./TestYard";
+import { DeskBattlefield } from "./DeskBattlefield";
+import { deskBattlefieldDefinition } from "./deskBattlefieldDef";
+import { PaperIsland } from "./PaperIsland";
+import { paperIslandDefinition } from "./paperIslandDef";
+import type {
+	MapBounds,
+	MapDefinition,
+	MapSpawn,
+	RuntimeSpawn,
+	Vec3Tuple,
+} from "./types";
 
-export type MapSpawn = {
-	position: Vec3;
-	/** Yaw in radians, 0 faces -Z. */
-	yaw: number;
+export type {
+	MapBounds,
+	MapDefinition,
+	MapSpawn,
+	RuntimeSpawn,
+	Vec3Tuple,
 };
+export { DEFAULT_MAP_ID } from "./definitions";
+export {
+	getMapBounds,
+	getMapDefinition,
+	getMapSpawns,
+	MAP_DEFINITIONS,
+} from "./definitions";
 
 export type MapEntry = {
 	id: string;
 	name: string;
+	tagline: string;
 	component: ComponentType;
 	spawns: MapSpawn[];
+	bounds: MapBounds;
+	definition?: MapDefinition;
 };
 
 /**
- * Component registry so maps plug in without touching route/bootstrap logic.
- * Spawn metadata stays next to the map component, not in routes.
+ * R3F map registry. Add a map by writing a MapDefinition + thin component,
+ * then registerMap — no route or bootstrap edits required.
  */
 const entries = new Map<string, MapEntry>();
 
@@ -34,14 +55,22 @@ export function listMaps(): MapEntry[] {
 	return [...entries.values()];
 }
 
-export const testYardEntry = registerMap({
-	id: "test-yard",
-	name: "Test Yard",
-	component: TestYard,
-	spawns: [
-		{ position: { x: 0, y: 1.2, z: 12 }, yaw: 0 },
-		{ position: { x: 0, y: 1.2, z: -12 }, yaw: Math.PI },
-		{ position: { x: 10, y: 1.2, z: 0 }, yaw: Math.PI / 2 },
-		{ position: { x: -10, y: 1.2, z: 0 }, yaw: -Math.PI / 2 },
-	],
+export const deskBattlefieldEntry = registerMap({
+	id: deskBattlefieldDefinition.id,
+	name: deskBattlefieldDefinition.name,
+	tagline: deskBattlefieldDefinition.tagline,
+	component: DeskBattlefield,
+	spawns: deskBattlefieldDefinition.spawns,
+	bounds: deskBattlefieldDefinition.bounds,
+	definition: deskBattlefieldDefinition,
+});
+
+export const paperIslandEntry = registerMap({
+	id: paperIslandDefinition.id,
+	name: paperIslandDefinition.name,
+	tagline: paperIslandDefinition.tagline,
+	component: PaperIsland,
+	spawns: paperIslandDefinition.spawns,
+	bounds: paperIslandDefinition.bounds,
+	definition: paperIslandDefinition,
 });

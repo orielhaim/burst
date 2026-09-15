@@ -4,6 +4,53 @@ import { PhysicsWorld, initRapier } from "../physics/PhysicsWorld";
 import { GameRuntime } from "./GameRuntime";
 import { useGameStore } from "./gameStore";
 const worlds: PhysicsWorld[] = [];
+test("entry lands where steered, keeps the same actor, and interpolates descent", () => {
+	const { runtime, step } = setup();
+	runtime.beginEntryDrop();
+	const start = runtime.player!.getPosition();
+	step({ moveX: 1 }, 30);
+	expect(runtime.cam.eye.y).not.toBe(runtime.prevCam.eye.y);
+	expect(runtime.player!.getPosition().x).toBeGreaterThan(start.x);
+	const actor = runtime.characters.actors.get("local");
+	expect(actor).toBeDefined();
+	let last = runtime.player!.getPosition();
+	for (let i = 0; i < 1200 && runtime.phase === "dropping"; i++) {
+		last = runtime.player!.getPosition();
+		step();
+	}
+	expect(runtime.phase).toBe("playing");
+	expect(runtime.characters.actors.get("local")).toBe(actor);
+	expect(Math.abs(runtime.player!.getPosition().x - last.x)).toBeLessThan(0.3);
+	expect(runtime.player!.getPosition().x).toBeGreaterThan(start.x);
+	expect(runtime.player!.isGrounded()).toBe(true);
+});
+test("entry finishes on an elevated surface before any scripted duration", () => {
+	const { runtime, step } = setup();
+	runtime.beginEntryDrop();
+	const start = runtime.player!.getPosition();
+	const physics = worlds[worlds.length - 1]!;
+	physics.createStaticBox({ position: { x: start.x, y: start.y - 5, z: start.z }, size: { x: 6, y: 1, z: 6 } });
+	physics.step(1 / 60);
+	step({}, 60);
+	expect(runtime.phase).toBe("playing");
+	expect(runtime.player!.getFeetPosition().y).toBeGreaterThan(start.y - 5);
+});
+test("pausing entry preserves altitude and flight state until resumed", () => {
+	const { runtime, step } = setup();
+	runtime.beginEntryDrop();
+	step({}, 30);
+	const position = runtime.player!.getPosition();
+	runtime.input.exitPointerLock = () => {};
+	runtime.input.requestPointerLock = () => {};
+	runtime.pause();
+	step({}, 120);
+	expect(runtime.player!.getPosition()).toEqual(position);
+	expect(runtime.entryDrop.active).toBe(true);
+	runtime.resume();
+	expect(runtime.phase).toBe("dropping");
+	step();
+	expect(runtime.player!.getPosition().y).toBeLessThan(position.y);
+});
 beforeAll(initRapier);
 afterAll(() => {
 	for (const world of worlds) world.dispose();

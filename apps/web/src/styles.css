@@ -15,9 +15,10 @@ body,
 body {
   margin: 0;
   overflow: hidden;
-  background: #f2ead8;
+  /* paper desk air */
+  background: #f6f0e2;
   color: #1c1814;
-  font-family: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+  font-family: "Comic Sans MS", "Segoe Print", "Bradley Hand", ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
 }
 
 canvas {

@@ -4,6 +4,8 @@ import type { GameRuntime } from "./GameRuntime";
 
 export const DEFAULT_UI: UiSnapshot = {
 	phase: "menu",
+	mode: "classic",
+	dropProgress: 0,
 	loadout: [],
 	selectedWeaponId: "",
 	meleeEquipped: false,
@@ -39,6 +41,7 @@ type GameStore = {
 function sameUi(a: UiSnapshot, b: UiSnapshot): boolean {
 	return (
 		a.phase === b.phase &&
+		a.mode === b.mode &&
 		a.selectedWeaponId === b.selectedWeaponId &&
 		a.meleeEquipped === b.meleeEquipped &&
 		JSON.stringify(a.loadout) === JSON.stringify(b.loadout) &&
@@ -49,6 +52,7 @@ function sameUi(a: UiSnapshot, b: UiSnapshot): boolean {
 		Math.abs(a.reloadProgress - b.reloadProgress) < 0.004 &&
 		a.aiming === b.aiming &&
 		Math.abs(a.adsProgress - b.adsProgress) < 0.004 &&
+		Math.abs(a.dropProgress - b.dropProgress) < 0.02 &&
 		a.health === b.health &&
 		a.maxHealth === b.maxHealth &&
 		a.fps === b.fps &&

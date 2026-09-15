@@ -1,6 +1,11 @@
 import { WORLD_ENVIRONMENT } from "../sim/Environment";
 import { CollisionLayer, interactionGroups } from "../physics/CollisionGroups";
-import { EMPTY_INPUT_FRAME, type GamePhase, type Vec3 } from "../core/types";
+import {
+	EMPTY_INPUT_FRAME,
+	type GameMode,
+	type GamePhase,
+	type Vec3,
+} from "../core/types";
 import { Input } from "../core/Input";
 
 import type { CharacterPhysics } from "../physics/characterPhysics";
@@ -26,6 +31,13 @@ import type { FireWeaponCommand } from "../weapons/WeaponDefinition";
 import { AbilityRuntime, type AbilityPresentation } from "../abilities/AbilityRuntime";
 import { grappleDefinition } from "../abilities/definitions";
 import { useGameStore } from "./gameStore";
+import {
+	DEFAULT_MAP_ID,
+	getMapBounds,
+	getMapSpawns,
+} from "../maps/definitions";
+import { EntryDrop } from "./entryDrop";
+import { DEFAULT_CHAOS_DROP_COUNT } from "../chaos/schedule";
 
 export type WeaponImpact = {
 	actorId?: string;
@@ -51,6 +63,8 @@ export type ShotEvent = {
 export type RuntimeOptions = {
 	mapId: string;
 	debug?: boolean;
+	/** classic or chaos. Chaos rains stationery during parachute entry. */
+	mode?: GameMode;
 };
 
 /**
@@ -107,9 +121,18 @@ export class GameRuntime {
 	weaponNodes: Record<string, unknown> | null = null;
 
 	phase: GamePhase = "menu";
+	mode: GameMode = "classic";
+	/** Parachute entry (top-down → land). */
+	readonly entryDrop = new EntryDrop();
+	/** Leave open routes between the physics-generated cover. */
+	chaosDropCount = DEFAULT_CHAOS_DROP_COUNT;
+	chaosSeed = 0;
 	health = 100;
 	maxHealth = 100;
 	fps = 0;
+	/** Times the local fighter has fallen off the desk this life. */
+	fallDeaths = 0;
+	private deathFlash = 0;
 
 	player: PlayerController | null = null;
 	obstruction: WeaponObstruction | null = null;
@@ -192,12 +215,13 @@ export class GameRuntime {
 	) {
 		this.mapId = options.mapId;
 		this.debug = options.debug ?? false;
+		this.mode = options.mode ?? "classic";
 		this.input = new Input(canvas);
 		this.input.setPointerLockListener((locked) => {
-			if (!locked && this.phase === "playing") {
+			if (!locked && (this.phase === "playing" || this.phase === "dropping")) {
 				this.setPhase("paused");
 			} else if (locked && this.phase === "paused") {
-				this.setPhase("playing");
+				this.setPhase(this.entryDrop.active ? "dropping" : "playing");
 			}
 		});
 	}
@@ -219,12 +243,19 @@ export class GameRuntime {
 	attachPhysics(physics: CharacterPhysics, spawn: Vec3, yaw: number): void {
 		this.physics = physics;
 		this.player = new PlayerController(physics, spawn, this.movementConfig);
-		if (this.mapId === "test-yard")
+		const bounds = getMapBounds(this.mapId);
+		this.player.killZone = {
+			killY: bounds.killY,
+			respawn: { ...spawn },
+		};
+		// Desk map ships a movement demonstrator on the notebook.
+		if (this.mapId === "desk-battlefield" || this.mapId === DEFAULT_MAP_ID) {
 			this.previewPlayer = new PlayerController(
 				physics,
-				{ x: -5, y: 1.2, z: 7 },
+				{ x: -3.5, y: 1.2, z: 5.5 },
 				{ ...this.movementConfig },
 			);
+		}
 		this.obstruction = new WeaponObstruction(
 			physics,
 			this.player.body,
@@ -240,6 +271,9 @@ export class GameRuntime {
 		this.obstructionRetraction = 0;
 		this.obstructionLateral = 0;
 		this.obstructionNormal = null;
+		this.health = this.maxHealth;
+		this.fallDeaths = 0;
+		this.deathFlash = 0;
 		this.snapCamera();
 		this.emitUi(true);
 	}
@@ -338,21 +372,116 @@ export class GameRuntime {
 	}
 
 	play(): void {
-		if (this.phase === "playing") return;
-		this.setPhase("playing");
+		if (this.phase === "playing" || this.phase === "dropping") return;
+		// First launch: parachute from above. Resume never re-drops.
+		if (this.phase === "menu" && this.player) {
+			this.beginEntryDrop();
+		} else {
+			this.setPhase("playing");
+		}
 		this.input.requestPointerLock();
 	}
 
 	pause(): void {
-		if (this.phase !== "playing") return;
+		if (this.phase !== "playing" && this.phase !== "dropping") return;
 		this.setPhase("paused");
 		this.input.exitPointerLock();
 	}
 
 	resume(): void {
-		if (this.phase !== "paused" && this.phase !== "menu") return;
-		this.setPhase("playing");
+		if (this.phase !== "paused") return;
+		// Resume mid-drop continues the parachute; otherwise normal play.
+		if (this.entryDrop.active) this.setPhase("dropping");
+		else this.setPhase("playing");
 		this.input.requestPointerLock();
+	}
+
+	setMode(mode: GameMode): void {
+		this.mode = mode;
+		this.emitUi(true);
+	}
+
+	/**
+	 * Start the parachute entry. Chaos Mode uses the same window to rain
+	 * loose stationery across the desk (seeded so the field is unique).
+	 */
+	beginEntryDrop(): void {
+		if (!this.player) {
+			this.setPhase("playing");
+			return;
+		}
+		const spawns = getMapSpawns(this.mapId);
+		const pick =
+			spawns[Math.floor(Math.random() * spawns.length)] ??
+			{ position: { x: 0, y: 1.5, z: 0 }, yaw: 0 };
+		const target = {
+			position: { x: pick.position.x, y: pick.position.y, z: pick.position.z },
+			yaw: pick.yaw,
+		};
+		this.player.killZone = {
+			killY: getMapBounds(this.mapId).killY,
+			respawn: { ...target.position },
+		};
+		this.chaosSeed = (Math.random() * 0x7fffffff) | 0;
+		this.entryDrop.start(target);
+		this.placePlayer(this.entryDrop.position);
+		this.camera.setYawPitch(this.entryDrop.yaw, this.entryDrop.pitch);
+		this.ability.reset();
+		this.adsProgress = 0;
+		this.health = this.maxHealth;
+		this.updateEyeFromFeet();
+		this.snapCamera();
+		this.setPhase("dropping");
+		this.emitUi(true);
+	}
+
+	private placePlayer(position: Vec3): void {
+		if (!this.player) return;
+		if (!this.player.teleport(position)) {
+			// High-altitude path points can fail capsule search — force set.
+			this.player.body.setTranslation(position, true);
+		}
+	}
+
+	private updateEyeFromFeet(): void {
+		if (!this.player) return;
+		this.feet = this.player.getFeetPosition();
+		const eyeHeight = this.player.getCameraHeight();
+		this.eye = {
+			x: this.feet.x,
+			y: this.feet.y + eyeHeight,
+			z: this.feet.z,
+		};
+	}
+
+	/** The existing player capsule flies, collides, and becomes playable in place. */
+	private updateEntryDrop(dt: number, frame: typeof EMPTY_INPUT_FRAME): boolean {
+		if (!this.player) return false;
+		this.camera.applyLookDelta(frame.lookX, frame.lookY);
+		const velocity = this.entryDrop.flightVelocity(frame.moveX, frame.moveZ,
+			this.camera.getYaw(), frame.sprintHeld, dt);
+		this.player.update(dt, {
+			moveX: frame.moveX, moveY: frame.moveZ, lookYaw: this.camera.getYaw(),
+			jumpPressed: false, jumpHeld: false, sprintHeld: false,
+			crouchHeld: false, crouchPressed: false, velocityOverride: velocity,
+		});
+		if (this.player.consumeFallDeath()) {
+			this.beginEntryDrop();
+			return false;
+		}
+		const finished = this.entryDrop.observe(this.player.getPosition(), this.player.isGrounded());
+		this.updateEyeFromFeet();
+		this.prevCam = this.cam;
+		this.cam = { eye: { ...this.eye }, yaw: this.camera.getYaw(), pitch: this.camera.getPitch() };
+		this.updateCharacters(dt);
+		if (finished) {
+			this.player.killZone = {
+				killY: getMapBounds(this.mapId).killY,
+				respawn: { ...this.player.getPosition() },
+			};
+			this.setPhase("playing");
+		}
+		return finished;
 	}
 
 	private setPhase(phase: GamePhase): void {
@@ -362,9 +491,18 @@ export class GameRuntime {
 
 	/** Fixed-step simulation. Called from the R3F driver with dt ≈ 1/60. */
 	fixedUpdate(rawDt: number): void {
+		if (this.phase === "paused") return;
 		const dt = Number.isFinite(rawDt)
 			? Math.max(0, Math.min(rawDt, 1 / 20))
 			: 0;
+
+		// —— parachute entry ——
+		if (this.phase === "dropping") {
+			const dropFrame = this.input.captureFrame();
+			this.updateEntryDrop(dt, dropFrame);
+			return;
+		}
+
 		const playing = this.phase === "playing";
 		const frame = playing ? this.input.captureFrame() : EMPTY_INPUT_FRAME;
 		const previousDefinition = this.equipment.definition.id;
@@ -414,12 +552,20 @@ export class GameRuntime {
 						: 1,
 				velocityOverride: abilityMotion,
 			});
+			if (this.player.consumeFallDeath()) this.handleFallDeath();
 			this.feet = this.player.getFeetPosition();
 			const eyeHeight = this.camera.smoothEyeHeight(
 				this.player.getCameraHeight(),
 				dt,
 			);
 			this.eye = { x: this.feet.x, y: this.feet.y + eyeHeight, z: this.feet.z };
+		}
+		if (this.deathFlash > 0) {
+			this.deathFlash = Math.max(0, this.deathFlash - dt);
+			if (this.deathFlash === 0 && this.health === 0) {
+				this.health = this.maxHealth;
+				this.emitUi(true);
+			}
 		}
 
 		this.camera.updateRecoil(dt);
@@ -697,64 +843,74 @@ export class GameRuntime {
 				ads: this.adsProgress,
 				hands: attachments,
 				wallPush: this.player.movement.wallNormal,
+				skydiving: this.entryDrop.active,
 			},
 			ground,
 			this.equipment.definition,
 			attachments.pose,
 		);
-		if (this.previewPlayer) {
-			// A movement demonstrator uses the real motor; animation consumes only its state.
-			const before = this.previewTime;
-			this.previewTime += dt;
-			const phase = Math.floor(this.previewTime / 2) % 8;
-			const last = Math.floor(before / 2) % 8;
-			const direction = [
-				{ x: 1, y: 0 },
-				{ x: 0, y: 1 },
-				{ x: -1, y: 0 },
-				{ x: 0, y: -1 },
-			][phase % 4]!;
-			this.previewPlayer.update(dt, {
-				moveX: direction.x,
-				moveY: direction.y,
-				lookYaw: 0,
-				sprintHeld: phase === 4 || phase === 5,
-				crouchHeld: phase === 2,
-				crouchPressed: phase === 5 && last !== phase,
-				jumpHeld: false,
-				jumpPressed: phase === 6 && last !== phase,
-			});
-			const feet = this.previewPlayer.getFeetPosition();
-			const eye = { ...feet, y: feet.y + this.previewPlayer.getCameraHeight() };
-			const weapon = this.equipment.primaries[0]!.definition;
-			const pose = resolveWeaponAttachments(
-				weapon,
-				eye,
-				0,
-				0,
-				phase === 3 ? 1 : 0,
-				0,
-				0,
-				0,
-				{ active: false, progress: 0 },
-			);
-			this.characters.update(
-				"preview",
-				dt,
-				{
-					feet,
-					motion: this.previewPlayer.movement,
-					aimYaw: 0,
-					aimPitch: 0,
-					ads: phase === 3 ? 1 : 0,
-					hands: pose,
-					wallPush: this.previewPlayer.movement.wallNormal,
-				},
-				ground,
-				weapon,
-				pose.pose,
-			);
-		}
+		if (this.previewPlayer) this.updatePreview(dt, ground);
+	}
+
+	/** Movement demonstrator bot — used during play and parachute entry. */
+	private updatePreview(
+		dt: number,
+		ground: (position: Vec3) => { position: Vec3; normal: Vec3 } | null,
+	): void {
+		if (!this.previewPlayer) return;
+		const before = this.previewTime;
+		this.previewTime += dt;
+		const phase = Math.floor(this.previewTime / 2) % 8;
+		const last = Math.floor(before / 2) % 8;
+		const direction = [
+			{ x: 1, y: 0 },
+			{ x: 0, y: 1 },
+			{ x: -1, y: 0 },
+			{ x: 0, y: -1 },
+		][phase % 4]!;
+		this.previewPlayer.update(dt, {
+			moveX: direction.x,
+			moveY: direction.y,
+			lookYaw: 0,
+			sprintHeld: phase === 4 || phase === 5,
+			crouchHeld: phase === 2,
+			crouchPressed: phase === 5 && last !== phase,
+			jumpHeld: false,
+			jumpPressed: phase === 6 && last !== phase,
+		});
+		const feet = this.previewPlayer.getFeetPosition();
+		const eye = {
+			...feet,
+			y: feet.y + this.previewPlayer.getCameraHeight(),
+		};
+		const weapon = this.equipment.primaries[0]!.definition;
+		const pose = resolveWeaponAttachments(
+			weapon,
+			eye,
+			0,
+			0,
+			phase === 3 ? 1 : 0,
+			0,
+			0,
+			0,
+			{ active: false, progress: 0 },
+		);
+		this.characters.update(
+			"preview",
+			dt,
+			{
+				feet,
+				motion: this.previewPlayer.movement,
+				aimYaw: 0,
+				aimPitch: 0,
+				ads: phase === 3 ? 1 : 0,
+				hands: pose,
+				wallPush: this.previewPlayer.movement.wallNormal,
+			},
+			ground,
+			weapon,
+			pose.pose,
+		);
 	}
 
 	private applyShotRecoil(): void {
@@ -768,6 +924,52 @@ export class GameRuntime {
 		this.viewRecoilVelocity += recoil.visualKick * this.recoilScale;
 	}
 
+	/**
+	 * Fell off the desk. Kill plane already teleported the body; this
+	 * presents death (HP → 0, short flash) then restores the fighter.
+	 */
+	private handleFallDeath(): void {
+		this.fallDeaths += 1;
+		this.health = 0;
+		this.deathFlash = 0.9;
+		this.adsProgress = 0;
+		this.ability.reset();
+		this.snapCamera();
+		this.emitUi(true);
+	}
+
+	private pickSpawn(): { position: Vec3; yaw: number } {
+		const spawns = getMapSpawns(this.mapId);
+		const pick = spawns[Math.floor(Math.random() * spawns.length)] ?? {
+			position: { x: 0, y: 1.5, z: 0 },
+			yaw: 0,
+		};
+		return {
+			position: {
+				x: pick.position.x,
+				y: pick.position.y,
+				z: pick.position.z,
+			},
+			yaw: pick.yaw,
+		};
+	}
+
+	/** Soft respawn used by UI / future combat deaths. */
+	respawnLocal(): void {
+		if (!this.player) return;
+		const spawn = this.pickSpawn();
+		const bounds = getMapBounds(this.mapId);
+		this.player.killZone = {
+			killY: bounds.killY,
+			respawn: { ...spawn.position },
+		};
+		this.player.teleport(spawn.position);
+		this.health = this.maxHealth;
+		this.deathFlash = 0;
+		this.snapCamera();
+		this.emitUi(true);
+	}
+
 	private emitUi(force: boolean): void {
 		const reload = this.weapon.reloadProgress;
 		const ability = this.abilityUi;
@@ -778,6 +980,8 @@ export class GameRuntime {
 		this.lastUiForceKey = key;
 		useGameStore.getState().setUi({
 			phase: this.phase,
+			mode: this.mode,
+			dropProgress: this.entryDrop.progress,
 			ammo: this.weapon.state.ammoInMagazine,
 			magazineSize: this.definition.magazineSize,
 			reloading: this.weapon.state.reloadState.type !== "idle",

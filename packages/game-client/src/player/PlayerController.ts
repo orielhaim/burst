@@ -11,11 +11,19 @@ import { type WallContact, WallDetector } from "./WallDetector";
 export type PlayerControllerConfig = MovementConfig;
 export const DEFAULT_PLAYER_CONFIG = DEFAULT_MOVEMENT_CONFIG;
 
+/** Map lethal boundary — falling past killY dies (off the desk). */
+export type KillZone = {
+	killY: number;
+	respawn: Vec3;
+};
+
 /** Fixed-step movement coordinator. DOM input and presentation stop at this seam. */
 export class PlayerController {
 	readonly config: MovementConfig;
 	readonly movement: MovementRuntimeState = createMovementState();
 	readonly motor: PlayerMotor;
+	killZone: KillZone | null = null;
+	private fellThisStep = false;
 	private readonly groundDetector: GroundDetector;
 	private readonly wallDetector: WallDetector;
 	private simulationTime = 0;
@@ -35,6 +43,13 @@ export class PlayerController {
 		this.motor = new PlayerMotor(physics, spawn, config.radius, config.standingHalfHeight, config);
 		this.groundDetector = new GroundDetector(physics);
 		this.wallDetector = new WallDetector(physics);
+	}
+
+	/** True once after falling past the map kill plane (already teleported back). */
+	consumeFallDeath(): boolean {
+		const fell = this.fellThisStep;
+		this.fellThisStep = false;
+		return fell;
 	}
 
 	get body(): RAPIER.RigidBody { return this.motor.body; }
@@ -146,7 +161,11 @@ export class PlayerController {
 		const resolved = this.motor.move(next, dt);
 		if (this.movement.sliding && Math.hypot(resolved.x, resolved.z) < cfg.slideExitSpeed) this.endSlide(input.crouchHeld);
 		this.updatePublicState(resolved);
-		if (position.y < -20) this.teleport({ x: 0, y: 2, z: 0 });
+		// Desk void: past the map kill plane the fighter is dead and returns to spawn.
+		if (this.killZone && position.y < this.killZone.killY) {
+			this.fellThisStep = true;
+			this.teleport({ ...this.killZone.respawn });
+		}
 	}
 
 	private detectGround(position: Vec3): GroundContact | null {

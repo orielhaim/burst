@@ -45,6 +45,7 @@ export type CharacterInput = {
 	ads: number;
 	hands: HandTargets;
 	wallPush?: Vec3 | null;
+	skydiving?: boolean;
 };
 export type FootState = {
 	position: Vec3;
@@ -107,6 +108,8 @@ export class ProceduralCharacter {
 	private nextFoot = 0;
 	private flinch = zero();
 	private previousAirVelocity = 0;
+	private flightBlend = 0;
+	private flightTime = 0;
 	constructor(readonly config = CHARACTER_CONFIG) {
 		this.hipHeight = config.hipHeight;
 	}
@@ -127,6 +130,10 @@ export class ProceduralCharacter {
 		dt = Math.min(dt, 0.05);
 		const { config: cfg, pose } = this;
 		const { motion, feet } = input;
+		this.flightTime += dt;
+		this.flightBlend +=
+			((input.skydiving ? 1 : 0) - this.flightBlend) *
+			(1 - Math.exp(-12 * dt));
 		const reset = !this.initialized || length(sub(feet, this.previousFeet)) > 3;
 		if (reset) {
 			pose.bodyYaw = input.aimYaw;
@@ -184,7 +191,13 @@ export class ProceduralCharacter {
 		pose.chest = add(
 			pose.hips,
 			add(
-				{ x: 0, y: cfg.torsoLength, z: 0 },
+				add(
+					{ x: 0, y: cfg.torsoLength - this.flightBlend * 0.1, z: 0 },
+					add(
+						scale(forward, this.flightBlend * 0.18),
+						scale(right, clamp(dot(motion.velocity, right) * 0.012, -0.1, 0.1) * this.flightBlend),
+					),
+				),
 				motion.sliding
 					? scale(travel, -0.18)
 					: add(
@@ -257,6 +270,13 @@ export class ProceduralCharacter {
 				target.y += motion.sliding
 					? 0.08
 					: 0.18 + clamp(motion.velocity.y * 0.018, 0, 0.16);
+				if (this.flightBlend > 0) {
+					target = add(target, add(
+						scale(forward, -0.45 * this.flightBlend),
+						scale(right, side * 0.15 * this.flightBlend),
+					));
+					target.y += 0.1 * this.flightBlend;
+				}
 				if (input.wallPush && i === (dot(input.wallPush, right) > 0 ? 0 : 1))
 					target = add(
 						pose.hips,
@@ -407,7 +427,15 @@ export class ProceduralCharacter {
 				add({ x: 0, y: 0.04, z: 0 }, scale(aimRight, side * 0.22)),
 			);
 		}
-		this.solveHands(input.hands);
+		const flightHand = (side: number) => add(pose.chest, rotate({
+			x: side * 0.52,
+			y: 0.12 + Math.sin(this.flightTime * 4 + side) * 0.018,
+			z: -0.38,
+		}, input.aimYaw));
+		this.solveHands({
+			support: lerp(input.hands.support, flightHand(-1), this.flightBlend),
+			primary: lerp(input.hands.primary, flightHand(1), this.flightBlend),
+		});
 		this.initialized = true;
 		this.wasGrounded = motion.grounded && !motion.sliding;
 		if (!motion.grounded) this.previousAirVelocity = motion.velocity.y;

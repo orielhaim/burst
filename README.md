@@ -13,7 +13,7 @@ The project is currently focused on building the core foundations: responsive mo
 ## Planned
 
 - Multiplayer
-- Multiple maps
+- More maps
 - More weapons
 - Skins and cosmetics
 - Game modes

@@ -27,7 +27,8 @@ export function groupsInteract(a: number, b: number): boolean {
 export const CollisionGroups = {
 	worldStatic: interactionGroups(
 		CollisionLayer.WORLD_STATIC,
-		CollisionLayer.PLAYER |
+		CollisionLayer.WORLD_DYNAMIC |
+			CollisionLayer.PLAYER |
 			CollisionLayer.WEAPON_QUERY |
 			CollisionLayer.PROJECTILE,
 	),

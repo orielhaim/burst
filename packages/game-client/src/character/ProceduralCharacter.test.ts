@@ -22,6 +22,22 @@ function input(): CharacterInput {
 		},
 	};
 }
+test("flight spreads the hands and returns the same rig to weapon grips after landing", () => {
+	const rig = new ProceduralCharacter();
+	const state = input();
+	state.skydiving = true;
+	state.motion.grounded = false;
+	state.motion.velocity.y = -8;
+	for (let i = 0; i < 60; i++) rig.update(1 / 60, state, () => null);
+	expect(rig.pose.hands[0].x).toBeLessThan(-0.4);
+	expect(rig.pose.hands[1].x).toBeGreaterThan(0.4);
+	expect(rig.pose.feet.every((foot) => !foot.planted)).toBe(true);
+	state.skydiving = false;
+	state.motion.grounded = true;
+	state.motion.velocity.y = 0;
+	for (let i = 0; i < 120; i++) rig.update(1 / 60, state, ground);
+	expect(length(sub(rig.pose.hands[1], state.hands.primary))).toBeLessThan(0.001);
+});
 test("planted feet remain world-locked while independent steps recover direction changes", () => {
 	const rig = new ProceduralCharacter();
 	const state = input();

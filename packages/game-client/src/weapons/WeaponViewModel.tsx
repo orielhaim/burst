@@ -1,4 +1,4 @@
-import { Edges, useFBO } from "@react-three/drei";
+import { useFBO } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
@@ -132,6 +132,8 @@ function EquippedWeaponView() {
 		) {
 			return;
 		}
+		root.current.visible = !runtime.entryDrop.active;
+		if (runtime.entryDrop.active) return;
 		const def = definition.viewModel;
 		const ads = runtime.adsProgress;
 		const blend = smoothstep(ads);
@@ -444,7 +446,6 @@ function WeaponPartMesh({ part }: { part: WeaponPartDefinition }) {
 				<cylinderGeometry args={[part.radius, part.radius, part.length, 16]} />
 			)}
 			<meshLambertMaterial color={css(color)} flatShading />
-			<Edges color={css(COLORS.ink)} />
 		</mesh>
 	);
 }
@@ -517,7 +518,6 @@ function Optic({
 					flatShading
 					side={THREE.DoubleSide}
 				/>
-				<Edges color={css(COLORS.ink)} />
 			</mesh>
 			<mesh position={[0, 0, scope.housing.length / 2 + 0.0005]}>
 				<ringGeometry
@@ -655,7 +655,7 @@ function ScopeLens({
 		const material = lensMaterialRef.current;
 		const lens = lensMeshRef.current;
 		if (!material || !lens) return;
-		const active = true;
+		const active = !runtime.entryDrop.active;
 		if (active !== state.active) {
 			state.active = active;
 			material.map = active ? target.texture : null;

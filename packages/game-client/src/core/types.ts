@@ -2,7 +2,10 @@ import type { Vec3 } from "@burst/game-core";
 
 export type { Vec3 };
 
-export type GamePhase = "menu" | "playing" | "paused";
+export type GamePhase = "menu" | "dropping" | "playing" | "paused";
+
+/** classic = normal desk. chaos = stationery rain during parachute entry. */
+export type GameMode = "classic" | "chaos";
 
 export type InputFrame = {
 	weaponCycle: number;
@@ -55,6 +58,9 @@ export type UiSnapshot = {
 	selectedWeaponId: string;
 	meleeEquipped: boolean;
 	phase: GamePhase;
+	mode: GameMode;
+	/** 0..1 parachute progress while phase === dropping. */
+	dropProgress: number;
 	ammo: number;
 	magazineSize: number;
 	reloading: boolean;
